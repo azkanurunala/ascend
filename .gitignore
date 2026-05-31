@@ -1,0 +1,14 @@
+node_modules/
+.expo/
+dist/
+web-build/
+*.log
+.DS_Store
+
+# native
+ios/
+android/
+
+# local design reference (handoff bundle)
+design.gz
+design_extract/
