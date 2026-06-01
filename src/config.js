@@ -40,10 +40,17 @@ export const ADMOB_ANDROID_REWARDED_UNIT = 'REPLACE_ME_android_rewarded_unit';
 export const USE_TEST_ADS = true;
 
 // --- Apple Game Center (global leaderboard) --------------------------------
-// The leaderboard's "Leaderboard ID" exactly as you type it in App Store
-// Connect → your app → Game Center → Leaderboards. This is an arbitrary string
-// you choose; it does NOT have to match the bundle id. Keep it in sync there.
-export const GAME_CENTER_LEADERBOARD_ID = 'ascend.altitude.alltime';
+// One leaderboard per difficulty. Create all three in App Store Connect → your
+// app → Game Center → Leaderboards, using these exact Leaderboard IDs.
+export const GAME_CENTER_LEADERBOARDS = {
+  chill: 'ascend.altitude.chill',
+  normal: 'ascend.altitude.normal',
+  intense: 'ascend.altitude.intense',
+};
+
+// Resolve a difficulty to its leaderboard ID (falls back to normal).
+export const leaderboardIdFor = (difficulty) =>
+  GAME_CENTER_LEADERBOARDS[difficulty] || GAME_CENTER_LEADERBOARDS.normal;
 
 // True only once you've filled in a real RevenueCat key. Gates IAP init so we
 // don't spam errors with the placeholder key.

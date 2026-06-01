@@ -4,14 +4,21 @@
 // opens Apple's native board. Auth is automatic (device Apple ID) — no login.
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Alert } from 'react-native';
 import MenuScreen from '../components/MenuScreen';
 import Glass from '../components/Glass';
 import { GhostButton } from '../components/Buttons';
+import { Segmented } from '../components/Controls';
 import { ScreenHead } from './_ScreenHead';
 import { ASC, FONT } from '../theme';
 import { fmtNum } from '../utils/format';
-import { loadTopScores, presentLeaderboard, isLeaderboardAvailable } from '../leaderboard';
+import {
+  loadTopScores,
+  presentLeaderboard,
+  isLeaderboardAvailable,
+  isAuthenticated,
+  authenticateGameCenter,
+} from '../leaderboard';
 
 // Deterministic local seed (no randomness → stable rankings across renders).
 const NAMES = [
@@ -29,20 +36,22 @@ const LB_SEED = NAMES.map((name, i) => ({
   f: FRIEND_IDX.has(i),
 }));
 
-export default function LeaderboardScreen({ best, width, height, topInset, bottomInset }) {
+export default function LeaderboardScreen({ best, difficulty = 'normal', width, height, topInset, bottomInset }) {
+  const [diff, setDiff] = useState(difficulty); // which board you're viewing
   const [live, setLive] = useState(null); // null = loading, [] = none, [...] = real
 
-  // Pull real Game Center scores when the tab opens.
+  // Pull real Game Center scores for the selected difficulty board.
   useEffect(() => {
     let alive = true;
+    setLive(null);
     (async () => {
-      const rows = await loadTopScores(50);
+      const rows = await loadTopScores(diff, 50);
       if (alive) setLive(rows);
     })();
     return () => {
       alive = false;
     };
-  }, []);
+  }, [diff]);
 
   const isLive = Array.isArray(live) && live.length > 0;
 
@@ -61,6 +70,20 @@ export default function LeaderboardScreen({ best, width, height, topInset, botto
   const above = me.rank ? rows.find((r) => r.rank === me.rank - 1) : null;
   const top = rows.slice(0, 50);
 
+  // Sign in (if needed), then open Apple's native board. Explain on failure so
+  // the button never just silently does nothing.
+  const openGameCenter = async () => {
+    let ok = await isAuthenticated();
+    if (!ok) ok = await authenticateGameCenter();
+    const presented = await presentLeaderboard(diff);
+    if (!presented) {
+      Alert.alert(
+        'Game Center unavailable',
+        'Sign in to Game Center to see the global leaderboard:\n\nSettings → Game Center → sign in.\n\nThe leaderboard also needs to exist in App Store Connect, and Game Center sign-in is unreliable on the Simulator — test on a real device with a sandbox account.'
+      );
+    }
+  };
+
   return (
     <MenuScreen
       width={width}
@@ -72,6 +95,11 @@ export default function LeaderboardScreen({ best, width, height, topInset, botto
         title="Leaderboard"
         right={<Text style={styles.resetChip}>{isLive ? 'Live' : 'Best'}</Text>}
       />
+
+      {/* difficulty board switcher */}
+      <View style={{ paddingHorizontal: 18, marginBottom: 14 }}>
+        <Segmented value={diff} options={['chill', 'normal', 'intense']} onChange={setDiff} />
+      </View>
 
       {/* your rank */}
       <View style={{ paddingHorizontal: 18, marginBottom: 14 }}>
@@ -93,7 +121,7 @@ export default function LeaderboardScreen({ best, width, height, topInset, botto
 
       {isLeaderboardAvailable() && (
         <View style={{ paddingHorizontal: 18, marginBottom: 14 }}>
-          <GhostButton label="View in Game Center" onPress={() => presentLeaderboard()} />
+          <GhostButton label="View in Game Center" onPress={openGameCenter} />
         </View>
       )}
 

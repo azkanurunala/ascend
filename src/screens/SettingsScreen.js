@@ -8,7 +8,7 @@ import MenuScreen from '../components/MenuScreen';
 import Glass from '../components/Glass';
 import { GhostButton } from '../components/Buttons';
 import { ScreenHead } from './_ScreenHead';
-import { Toggle } from '../components/Controls';
+import { Toggle, Segmented } from '../components/Controls';
 import { ASC, FONT } from '../theme';
 
 function Row({ label, sub, value, onToggle, last }) {
@@ -26,7 +26,7 @@ function Row({ label, sub, value, onToggle, last }) {
   );
 }
 
-export default function SettingsScreen({ settings, onToggle, onReset, onRestore, restoring, pro, onManage, storeAvailable, width, height, topInset, bottomInset }) {
+export default function SettingsScreen({ settings, onToggle, tweaks, setTweak, onReset, onRestore, restoring, pro, onManage, storeAvailable, width, height, topInset, bottomInset }) {
   const [confirm, setConfirm] = useState(false);
   return (
     <MenuScreen
@@ -41,6 +41,22 @@ export default function SettingsScreen({ settings, onToggle, onReset, onRestore,
         <Row label="Reduced motion" sub="Calmer trails and shake" value={settings.reduceMotion} onToggle={() => onToggle('reduceMotion')} />
         <Row label="Haptics" sub="Subtle taps on collision" value={settings.haptics} onToggle={() => onToggle('haptics')} />
         <Row label="Graphics quality" sub="Particles, stars and blur" value={settings.highQuality} onToggle={() => onToggle('highQuality')} last />
+      </Glass>
+
+      {/* Game feel (moved here from the floating Tweaks panel) */}
+      <Glass tone="hi" pad={16} radius={22} style={{ marginBottom: 16 }}>
+        <Text style={styles.section}>GAME FEEL</Text>
+        <Text style={styles.feelLabel}>Difficulty</Text>
+        <Segmented
+          value={tweaks.difficulty}
+          options={['chill', 'normal', 'intense']}
+          onChange={(v) => setTweak('difficulty', v)}
+        />
+        <Text style={styles.feelHint}>Each difficulty has its own Game Center leaderboard.</Text>
+        <View style={styles.feelRow}>
+          <Text style={styles.rowLabel}>Menu motion</Text>
+          <Toggle value={tweaks.menuMotion} onChange={(v) => setTweak('menuMotion', v)} />
+        </View>
       </Glass>
 
       {/* Ascend Pro */}
@@ -111,6 +127,11 @@ const styles = StyleSheet.create({
   rowLabel: { fontFamily: FONT.sansSemi, fontSize: 14.5, color: ASC.ink },
   rowSub: { fontFamily: FONT.sans, fontSize: 12, color: ASC.ink2, marginTop: 1 },
   sep: { height: 1, backgroundColor: 'rgba(255,255,255,0.5)', marginHorizontal: 16 },
+
+  section: { fontFamily: FONT.monoSemi, fontSize: 10, letterSpacing: 1.2, color: ASC.ink3, marginBottom: 10 },
+  feelLabel: { fontFamily: FONT.sansSemi, fontSize: 13, color: ASC.ink2, marginBottom: 8 },
+  feelHint: { fontFamily: FONT.sans, fontSize: 11.5, color: ASC.ink3, marginTop: 8 },
+  feelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 },
 
   proRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
   proTitle: { fontFamily: FONT.sansBold, fontSize: 15, color: ASC.ink },

@@ -20,13 +20,19 @@ below, then make a fresh dev build (the native module must compile in).
    Identifiers & Profiles → your App ID (`com.ascend.game`) → enable **Game Center**.
    (EAS-managed credentials usually handle this when the entitlement is present,
    but verify it's on.)
-2. **Create the leaderboard.** App Store Connect → your app → **Services →
-   Game Center → Leaderboards** → add a **Classic** leaderboard:
-   - **Leaderboard ID:** `ascend.altitude.alltime` *(must match `src/config.js`)*
-   - **Score format:** Integer
-   - **Sort order:** High to Low
-   - **Score range** (optional): e.g. 0–10000000
-   - Add a leaderboard name + localization (e.g. "Altitude").
+2. **Create THREE leaderboards** — one per difficulty. App Store Connect → your
+   app → **Services → Game Center → Leaderboards** → add a **Classic** leaderboard
+   for each, with these exact IDs (must match `GAME_CENTER_LEADERBOARDS` in
+   `src/config.js`):
+   | Difficulty | Leaderboard ID | Suggested name |
+   |-----------|----------------|----------------|
+   | Chill | `ascend.altitude.chill` | Altitude — Chill |
+   | Normal | `ascend.altitude.normal` | Altitude — Normal |
+   | Intense | `ascend.altitude.intense` | Altitude — Intense |
+   For each: **Score format** Integer, **Sort order** High to Low, optional score
+   range (e.g. 0–10000000), and a localized name. The app submits each run to the
+   board matching the difficulty it was played on, and the Leaderboard screen has a
+   chill/normal/intense switcher.
 3. **Rebuild & submit** — the native module needs a fresh binary:
    ```
    git add -A && git commit

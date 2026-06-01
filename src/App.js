@@ -36,7 +36,6 @@ import CosmeticsScreen from './screens/CosmeticsScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import GameOverOverlay from './screens/GameOverOverlay';
 import BottomNav from './components/BottomNav';
-import TweaksPanel from './components/TweaksPanel';
 import { IconClose } from './components/Icons';
 
 const DEFAULT_OWNED = ['drift']; // free skin; the rest unlock with Ascend Pro
@@ -162,9 +161,10 @@ function Game() {
       setPlaytime((p) => p + (secs || 0));
       setBest((b) => Math.max(b, score));
       setOver({ score, isBest: score > best, band: skyAt(score).name });
-      submitLeaderboard(score); // Game Center keeps the player's highest
+      // Submit to this run's difficulty board (difficulty can't change mid-run).
+      submitLeaderboard(score, tweaks.difficulty);
     },
-    [best]
+    [best, tweaks.difficulty]
   );
 
   const retry = useCallback(() => {
@@ -328,7 +328,14 @@ function Game() {
     );
   } else if (tab === 'ranks') {
     screen = (
-      <LeaderboardScreen best={best} width={width} height={height} topInset={topInset} bottomInset={bottomInset} />
+      <LeaderboardScreen
+        best={best}
+        difficulty={tweaks.difficulty}
+        width={width}
+        height={height}
+        topInset={topInset}
+        bottomInset={bottomInset}
+      />
     );
   } else if (tab === 'skins') {
     screen = (
@@ -352,6 +359,8 @@ function Game() {
       <SettingsScreen
         settings={settings}
         onToggle={toggleSetting}
+        tweaks={tweaks}
+        setTweak={setTweak}
         onReset={resetAll}
         onRestore={restore}
         restoring={restoring}
@@ -372,12 +381,7 @@ function Game() {
     <View style={[styles.root, { backgroundColor: dark ? '#070A1B' : '#79C7E8' }]}>
       <StatusBar style={dark ? 'light' : 'dark'} />
       {screen}
-      {mode !== 'playing' && (
-        <>
-          <BottomNav tab={tab} setTab={setTab} bottomInset={bottomInset} />
-          <TweaksPanel tweaks={tweaks} setTweak={setTweak} bottomInset={bottomInset} />
-        </>
-      )}
+      {mode !== 'playing' && <BottomNav tab={tab} setTab={setTab} bottomInset={bottomInset} />}
     </View>
   );
 }

@@ -6,7 +6,7 @@
 // build made before the module was compiled), so callers never crash.
 
 import { Platform } from 'react-native';
-import { GAME_CENTER_LEADERBOARD_ID } from './config';
+import { leaderboardIdFor } from './config';
 
 // Lazy-load the native bridge; null when unavailable.
 function gc() {
@@ -40,35 +40,36 @@ export async function isAuthenticated() {
   }
 }
 
-// Submit a run/best score. Game Center keeps the player's highest automatically.
-export async function submitScore(score) {
+// Submit a run/best score to that difficulty's board. Game Center keeps the
+// player's highest automatically.
+export async function submitScore(score, difficulty) {
   const m = gc();
   if (!m || !score || score <= 0) return false;
   try {
-    return await m.submitScore(Math.floor(score), GAME_CENTER_LEADERBOARD_ID);
+    return await m.submitScore(Math.floor(score), leaderboardIdFor(difficulty));
   } catch (e) {
     return false;
   }
 }
 
-// Open Apple's native global leaderboard screen.
-export async function presentLeaderboard() {
+// Open Apple's native leaderboard screen for a difficulty.
+export async function presentLeaderboard(difficulty) {
   const m = gc();
   if (!m) return false;
   try {
-    return await m.presentLeaderboard(GAME_CENTER_LEADERBOARD_ID);
+    return await m.presentLeaderboard(leaderboardIdFor(difficulty));
   } catch (e) {
     return false;
   }
 }
 
-// Fetch the top N global entries to render in the app's own glass UI.
+// Fetch the top N entries for a difficulty to render in the app's own glass UI.
 // Returns [{ rank, name, score, me }] — empty array if unavailable.
-export async function loadTopScores(count = 50) {
+export async function loadTopScores(difficulty, count = 50) {
   const m = gc();
   if (!m) return [];
   try {
-    const rows = await m.loadTopScores(GAME_CENTER_LEADERBOARD_ID, count);
+    const rows = await m.loadTopScores(leaderboardIdFor(difficulty), count);
     return Array.isArray(rows) ? rows : [];
   } catch (e) {
     return [];
