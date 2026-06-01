@@ -60,18 +60,17 @@ drives the status-bar style via `onBand`.
 all keys prefixed `ascend.`. `today()` returns a local `YYYY-MM-DD` key powering the daily
 revive reset (1 free + 1 ad revive/day, capped at 2).
 
-**Monetization is real** (RevenueCat IAP + AdMob rewarded ads). Premium is a single
-**Ascend Pro** lifetime unlock (entitlement `Ascend Pro`) that unlocks all skins + makes
-revives free. `src/iap.js` is the RevenueCat hub (`initIAP` with customer-info listener,
+**Monetization is real (RevenueCat IAP only — NO ads).** Premium is a single **Ascend Pro**
+lifetime unlock (entitlement `Ascend Pro`) that unlocks all skins + gives unlimited free
+revives. `src/iap.js` is the RevenueCat hub (`initIAP` with customer-info listener,
 `getProStatus`, `presentPaywall`, `presentCustomerCenter`, `restorePurchases`,
 `getOfferingPrice`) using the hosted **Paywall** + **Customer Center** (`react-native-purchases-ui`).
-`src/ads.js` is the AdMob rewarded wrapper (`initAds`/`preloadRevive`/`showReviveAd`). All
-keys/IDs live in `src/config.js` (`REVENUECAT_IOS_KEY` is a `test_…` sandbox key → swap for
-`appl_…` before release; `USE_TEST_ADS=true` until then). In `App.js`, `pro` is driven by the
-RevenueCat listener; `owned = pro ? all skins : ['drift']`; locked skins open the paywall;
-`reviveNow()` skips the ad when Pro. **Dashboard setup (entitlement/product/offering/paywall/
-customer-center) + App Privacy changes are in `MONETIZATION_SETUP.md`.** Because AdMob collects
-a device identifier, the app can no longer declare "Data Not Collected".
+`REVENUECAT_IOS_KEY` in `src/config.js` is the live `appl_…` key. In `App.js`, `pro` is driven by
+the RevenueCat listener; `owned = pro ? all skins : ['drift']`; locked skins open the paywall.
+**Revives:** free players get 1/day (`FREE_REVIVES_PER_DAY`), beyond that `reviveNow()` opens the
+paywall to buy Pro; Pro = unlimited free revives. There are **no ad SDKs** in the build (AdMob +
+tracking-transparency were removed), so App Privacy declares no advertising/tracking — just
+Purchases (+ Game Center). Dashboard setup is in `MONETIZATION_SETUP.md`.
 
 **Leaderboard is real via Apple Game Center** (iOS-only, no login UI — GameKit auto-auths
 the device Apple ID). Native bridge is a **local Expo module**, `modules/expo-game-center/`

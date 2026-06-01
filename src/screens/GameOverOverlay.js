@@ -16,7 +16,6 @@ export default function GameOverOverlay({
   best,
   isBest,
   band,
-  reviveReady,
   reviveLabel,
   onRetry,
   onRevive,
@@ -49,7 +48,6 @@ export default function GameOverOverlay({
 
           <GhostButton
             label={reviveLabel}
-            disabled={!reviveReady}
             icon={<IconRevive size={16} color={ASC.ink} />}
             onPress={onRevive}
             style={{ marginTop: 10 }}

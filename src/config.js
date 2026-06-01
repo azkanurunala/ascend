@@ -1,20 +1,15 @@
 // ============ MONETIZATION CONFIG ============
-// Central place for all the keys/IDs you create in the AdMob and RevenueCat
-// dashboards + App Store Connect. Replace every `REPLACE_ME` before a release
-// build. Until then the app falls back to Google's official TEST ad units and
-// IAP simply fails gracefully (no crash), so dev builds keep working.
+// Central place for the RevenueCat key/entitlement and Game Center leaderboard
+// IDs. No ads — there are no ad SDKs in this app.
 //
 // See MONETIZATION_SETUP.md for the step-by-step account checklist.
 
 // --- RevenueCat (in-app purchases) -----------------------------------------
-// Public SDK key (safe to embed). Project → API keys → "Public app-specific
-// API Key". For the real App Store this MUST be the Apple key `appl_…`.
-//
-// ⚠️ The value below is a RevenueCat *Test Store / sandbox* key (`test_…`). It
-// lets you exercise the paywall + entitlement flow in development, but it does
-// NOT transact against the real App Store. Before the production build, replace
-// it with the `appl_…` key from your Apple app in RevenueCat → API Keys.
-export const REVENUECAT_IOS_KEY = 'test_GVPpCkTVxwamqQtoXPeufvuDtof';
+// Public SDK key (safe to embed — designed to ship in the client). This is the
+// Apple App Store "Public app-specific API key" (`appl_…`) from the Ascend
+// project in RevenueCat → API Keys. It transacts against the real App Store, so
+// products must exist in App Store Connect and be synced into RevenueCat.
+export const REVENUECAT_IOS_KEY = 'appl_tBJKIngPLFoOjYtgwDOcHGpATuD';
 export const REVENUECAT_ANDROID_KEY = 'REPLACE_ME_revenuecat_google_key';
 
 // The entitlement that unlocks premium content. MUST match the entitlement
@@ -25,19 +20,17 @@ export const ENTITLEMENT_ID = 'Ascend Pro';
 // the "current" offering you set as default in the RevenueCat dashboard.
 export const OFFERING_ID = null;
 
-// --- Google AdMob (rewarded revive ad) -------------------------------------
-// AdMob → Apps → your app → App ID (ca-app-pub-XXXX~YYYY) and the rewarded
-// ad unit ID (ca-app-pub-XXXX/ZZZZ). The App ID ALSO goes in app.json.
-export const ADMOB_IOS_APP_ID = 'ca-app-pub-3940256099942544~1458002511'; // test app id
-export const ADMOB_ANDROID_APP_ID = 'ca-app-pub-3940256099942544~3347511713'; // test app id
-export const ADMOB_IOS_REWARDED_UNIT = 'REPLACE_ME_ios_rewarded_unit';
-export const ADMOB_ANDROID_REWARDED_UNIT = 'REPLACE_ME_android_rewarded_unit';
+// The lifetime product ID. Used as a direct fallback when the RevenueCat
+// offering isn't configured yet (or during StoreKit-config simulator testing).
+// Must match the product ID in App Store Connect / Ascend.storekit.
+export const PRO_PRODUCT_ID = 'lifetime';
 
-// Force Google's test ads regardless of the unit IDs above. Keep true while
-// developing; set false for the production build (real ads, real revenue).
-// Tapping a REAL ad you own during testing can get your AdMob account banned —
-// always test with this true.
-export const USE_TEST_ADS = true;
+// Display-only fallback price for the paywall when the store can't return a
+// live price (e.g. Simulator without a StoreKit config). The real localized
+// price from the store always takes precedence when available.
+export const PRO_FALLBACK_PRICE = '$3.99';
+
+// No ads. Reviving beyond the free daily one requires the Ascend Pro purchase.
 
 // --- Apple Game Center (global leaderboard) --------------------------------
 // One leaderboard per difficulty. Create all three in App Store Connect → your
@@ -56,5 +49,5 @@ export const leaderboardIdFor = (difficulty) =>
 // don't spam errors with the placeholder key.
 export const IAP_CONFIGURED = !REVENUECAT_IOS_KEY.startsWith('REPLACE_ME');
 
-// Whether a key still looks like a placeholder (used by ads.js too).
+// Whether a key still looks like a placeholder.
 export const isPlaceholder = (v) => typeof v !== 'string' || v.startsWith('REPLACE_ME');

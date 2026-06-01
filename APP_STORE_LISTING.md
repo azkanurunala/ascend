@@ -68,16 +68,15 @@ First launch! Climb from the meadow to orbit in this one-tap arcade challenge. U
 - **Privacy Policy URL:** (required) — even if you collect nothing, you must host a short policy
 
 ### App Privacy answers (review before submitting)
-⚠️ v1.0 now ships **real AdMob rewarded ads + RevenueCat IAP** — you can **NOT** declare
-"Data Not Collected". Full toggle-by-toggle guidance is in **`MONETIZATION_SETUP.md` §D**.
-Summary:
-- **Identifiers → Device ID** — Third-Party Advertising (AdMob).
-- **Purchases** — purchase history (IAP), App Functionality.
-- **Usage Data** — product interaction (AdMob measurement), Advertising.
-- Mark that the app **contains ads** in the age-rating questionnaire.
+**No ads, no tracking.** v1.0 ships RevenueCat IAP (Ascend Pro) + optional Game Center.
+Full guidance in **`MONETIZATION_SETUP.md` §C**. Summary:
+- **Purchases** — purchase history (the Ascend Pro IAP), App Functionality. Not tracking.
+- **Game Center** (if leaderboard kept) — player ID / display name, App Functionality.
+- **No** advertising data, **no** Device-ID-for-ads, **no** ATT prompt.
+- The app does **not** contain ads (age-rating questionnaire).
 - **Privacy Policy URL is required** — host `docs/privacy.html` (GitHub Pages) and use that URL.
-- Create the 5 IAP products + sign the Paid Apps Agreement, and **add the IAPs to the
-  version** so they're reviewed alongside the build.
+- Create the **`lifetime`** IAP + sign the Paid Apps Agreement, and **add it to the
+  version** so it's reviewed alongside the build.
 
 ### Screenshots (required — capture from the simulator with Cmd+S)
 Minimum one set at iPhone 6.7" (1290×2796). Suggested shots:

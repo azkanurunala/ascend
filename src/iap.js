@@ -23,6 +23,7 @@ import {
   REVENUECAT_ANDROID_KEY,
   ENTITLEMENT_ID,
   OFFERING_ID,
+  PRO_PRODUCT_ID,
   isPlaceholder,
 } from './config';
 
@@ -140,6 +141,57 @@ export async function restorePurchases() {
     return hasPro(await P.restorePurchases());
   } catch (e) {
     return false;
+  }
+}
+
+// The Pro offer for our custom paywall: { priceString, pkg?, product? } or null.
+// Prefers the configured RevenueCat offering; falls back to fetching the product
+// directly by ID (so the paywall still works during StoreKit-config simulator
+// testing, or before the offering is wired up in the dashboard).
+export async function getProOffering() {
+  const P = Purchases();
+  if (!P || !configured) return null;
+  try {
+    const offerings = await P.getOfferings();
+    const offering = OFFERING_ID ? offerings.all?.[OFFERING_ID] : offerings.current;
+    const pkg = offering?.lifetime || offering?.availablePackages?.[0];
+    if (pkg) {
+      return { priceString: pkg.product?.priceString || null, pkg, product: null };
+    }
+  } catch (e) {
+    /* fall through to direct product lookup */
+  }
+  try {
+    const products = await P.getProducts([PRO_PRODUCT_ID]);
+    const product = products?.find((p) => p.identifier === PRO_PRODUCT_ID) || products?.[0];
+    if (product) {
+      return { priceString: product.priceString || null, pkg: null, product };
+    }
+  } catch (e) {
+    /* no product available */
+  }
+  return null;
+}
+
+// Purchase the Pro offer from our paywall. Returns { ok, cancelled, error }.
+export async function purchasePro(offer) {
+  const P = Purchases();
+  if (!P || !configured || !offer) {
+    return { ok: false, error: 'The store is unavailable right now.' };
+  }
+  try {
+    let customerInfo;
+    if (offer.pkg) {
+      ({ customerInfo } = await P.purchasePackage(offer.pkg));
+    } else if (offer.product) {
+      ({ customerInfo } = await P.purchaseStoreProduct(offer.product));
+    } else {
+      return { ok: false, error: 'Nothing to purchase.' };
+    }
+    return { ok: hasPro(customerInfo) };
+  } catch (e) {
+    if (e && e.userCancelled) return { ok: false, cancelled: true };
+    return { ok: false, error: (e && e.message) || 'Purchase failed.' };
   }
 }
 

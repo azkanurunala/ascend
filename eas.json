@@ -24,7 +24,10 @@
   },
   "submit": {
     "production": {
-      "ios": {}
+      "ios": {
+        "appleId": "nurunalaazka@gmail.com",
+        "appleTeamId": "JWYH3R2628"
+      }
     }
   }
 }

@@ -1,0 +1,35 @@
+{
+  "identifier" : "A5C3D000-0000-4000-8000-A5CENDPR0001",
+  "nonRenewingSubscriptions" : [],
+  "products" : [
+    {
+      "displayPrice" : "3.99",
+      "familyShareable" : false,
+      "internalID" : "A5C3D000-0000-4000-8000-A5CENDPR0002",
+      "localizations" : [
+        {
+          "description" : "Unlock every orb skin and unlimited revives.",
+          "displayName" : "Ascend Pro",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "lifetime",
+      "referenceName" : "Ascend Pro Lifetime",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_applicationInternalID" : "0000000000",
+    "_developerTeamID" : "JWYH3R2628",
+    "_failTransactionsEnabled" : false,
+    "_lastSynchronizedDate" : 0,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : []
+  },
+  "subscriptionGroups" : [],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}

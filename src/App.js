@@ -3,7 +3,7 @@
 // Ported from ascend-app.jsx and adapted to a real device (no iOS frame).
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Pressable, StyleSheet, useWindowDimensions, Alert } from 'react-native';
+import { View, Text, Pressable, StyleSheet, useWindowDimensions, Alert, LogBox } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFonts } from 'expo-font';
@@ -16,13 +16,11 @@ import {
 } from '@expo-google-fonts/plus-jakarta-sans';
 import { JetBrainsMono_500Medium, JetBrainsMono_600SemiBold } from '@expo-google-fonts/jetbrains-mono';
 
-import { ASC, ASC_BANDS, ASC_SKINS, skyAt, skinById } from './theme';
+import { ASC, ASC_BANDS, ASC_SKINS, FONT, skyAt, skinById } from './theme';
 import { LS, today } from './storage';
-import { initAds, showReviveAd, preloadRevive } from './ads';
 import {
   initIAP,
   getProStatus,
-  presentPaywall,
   presentCustomerCenter,
   restorePurchases,
   getOfferingPrice,
@@ -35,14 +33,20 @@ import LeaderboardScreen from './screens/LeaderboardScreen';
 import CosmeticsScreen from './screens/CosmeticsScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import GameOverOverlay from './screens/GameOverOverlay';
+import PaywallModal from './screens/PaywallModal';
 import BottomNav from './components/BottomNav';
 import { IconClose } from './components/Icons';
+
+// RevenueCat logs verbose store-config errors as console.error (e.g. on the
+// Simulator with no products); they're dev-only noise, so keep them out of the
+// red LogBox overlay. They still print to the Metro console.
+LogBox.ignoreLogs([/\[RevenueCat\]/, /problem with the App Store/, /offerings/i]);
 
 const DEFAULT_OWNED = ['drift']; // free skin; the rest unlock with Ascend Pro
 const ALL_SKIN_IDS = ASC_SKINS.map((s) => s.id);
 const DEFAULT_SETTINGS = { sound: true, reduceMotion: false, haptics: true, highQuality: true };
 const DEFAULT_TWEAKS = { difficulty: 'normal', menuMotion: true };
-const REVIVE_CAP = 2; // PRD §15: 1 free + 1 ad per day
+const FREE_REVIVES_PER_DAY = 1; // free users get 1/day; more requires Ascend Pro
 
 function Game() {
   const { width, height } = useWindowDimensions();
@@ -69,7 +73,7 @@ function Game() {
   // Ascend Pro entitlement (RevenueCat is the source of truth — not persisted).
   const [pro, setPro] = useState(false);
   const [proPrice, setProPrice] = useState(null); // localized lifetime price
-  const [unlocking, setUnlocking] = useState(false);
+  const [paywall, setPaywall] = useState(null); // null | { intent, equip }
   const [restoring, setRestoring] = useState(false);
 
   // ---- load persisted state once ----
@@ -110,13 +114,12 @@ function Game() {
   useEffect(() => { if (loaded) LS.set('tweaks', tweaks); }, [tweaks, loaded]);
 
   // ---- monetization init (once) ----
-  // Start AdMob + Game Center, configure RevenueCat with a customer-info
-  // listener (the source of truth for Ascend Pro), and fetch the current Pro
-  // status + lifetime price. All no-ops until real keys are set in config.js
-  // (see MONETIZATION_SETUP.md).
+  // Start Game Center, configure RevenueCat with a customer-info listener (the
+  // source of truth for Ascend Pro), and fetch the current Pro status + lifetime
+  // price. All no-ops until real keys are set in config.js (see
+  // MONETIZATION_SETUP.md).
   useEffect(() => {
     let alive = true;
-    initAds();
     authenticateGameCenter(); // signs in with the device's Apple ID — no login UI
     initIAP((isPro) => {
       if (alive) setPro(isPro);
@@ -137,12 +140,10 @@ function Game() {
   const owned = pro ? ALL_SKIN_IDS : DEFAULT_OWNED;
   const skin = skinById(owned.includes(equipped) ? equipped : 'drift');
   const revivesUsed = revive.date === today() ? revive.used : 0;
-  const reviveReady = revivesUsed < REVIVE_CAP;
-  const reviveLabel = !reviveReady
-    ? 'Revive used today'
-    : revivesUsed === 0 || pro
-    ? 'Revive — free'
-    : 'Revive — watch ad';
+  // Pro = unlimited free revives. Free players get one per day, then Ascend Pro.
+  const hasFreeRevive = pro || revivesUsed < FREE_REVIVES_PER_DAY;
+  const reviveReady = hasFreeRevive; // drives the Home "REVIVE" stat
+  const reviveLabel = hasFreeRevive ? 'Revive — free' : 'Revive — Ascend Pro';
   const topBand = best > 0 ? skyAt(best).name : '—';
   const menuAnimate = tweaks.menuMotion && !settings.reduceMotion;
 
@@ -152,7 +153,6 @@ function Game() {
     setStatusDark(false);
     setRunKey((k) => k + 1);
     setMode('playing');
-    preloadRevive(); // have a rewarded ad ready by the time the run ends
   }, []);
 
   const handleGameOver = useCallback(
@@ -173,20 +173,15 @@ function Game() {
     setRunKey((k) => k + 1);
   }, []);
 
-  const reviveNow = useCallback(async () => {
+  const reviveNow = useCallback(() => {
     const used = revive.date === today() ? revive.used : 0;
-    if (used >= REVIVE_CAP) return;
-    // First revive of the day is free. The second requires a rewarded ad —
-    // unless the player has Ascend Pro, which makes both revives free. Only
-    // consume the revive (and resurrect) if the ad was actually earned.
-    if (used >= 1 && !pro) {
-      const earned = await showReviveAd();
-      if (!earned) {
-        Alert.alert('No ad available', 'Couldn’t load a rewarded ad right now. Please try again in a moment.');
-        return;
-      }
+    // Pro players revive freely. Free players get one revive/day; beyond that,
+    // open the paywall — the run resurrects on a successful purchase.
+    if (!pro && used >= FREE_REVIVES_PER_DAY) {
+      setPaywall({ intent: 'revive' });
+      return;
     }
-    setRevive({ date: today(), used: used + 1 });
+    if (!pro) setRevive({ date: today(), used: used + 1 });
     setOver(null);
     setReviveAt((x) => x + 1);
   }, [revive, pro]);
@@ -199,25 +194,23 @@ function Game() {
   }, []);
 
   // ---- cosmetics / settings ----
-  // Tapping a locked skin (or "Unlock Ascend Pro") opens the RevenueCat paywall.
-  // The customer-info listener flips `pro`; we also optimistically set it so the
-  // newly-unlocked skin can be equipped immediately.
-  const unlockPro = useCallback(
-    async (equipId) => {
-      if (unlocking) return;
-      setUnlocking(true);
-      try {
-        const { purchased } = await presentPaywall();
-        if (purchased) {
-          setPro(true);
-          if (equipId) setEquipped(equipId);
-        }
-      } finally {
-        setUnlocking(false);
-      }
-    },
-    [unlocking]
-  );
+  // Tapping a locked skin (or "Unlock Ascend Pro") opens our custom paywall.
+  const unlockPro = useCallback((equipId) => {
+    setPaywall({ intent: 'skin', equip: equipId });
+  }, []);
+
+  // Paywall reported a successful purchase: flip Pro, then fulfill the intent
+  // (resurrect the run, or equip the skin the user was unlocking).
+  const onPaywallPurchased = useCallback(() => {
+    setPro(true);
+    if (paywall?.intent === 'revive') {
+      setOver(null);
+      setReviveAt((x) => x + 1);
+    } else if (paywall?.equip) {
+      setEquipped(paywall.equip);
+    }
+    setPaywall(null);
+  }, [paywall]);
 
   const restore = useCallback(async () => {
     if (restoring) return;
@@ -299,7 +292,6 @@ function Game() {
             best={best}
             isBest={over.isBest}
             band={over.band}
-            reviveReady={reviveReady}
             reviveLabel={reviveLabel}
             onRetry={retry}
             onRevive={reviveNow}
@@ -346,7 +338,6 @@ function Game() {
         onUnlock={unlockPro}
         pro={pro}
         proPrice={proPrice}
-        unlocking={unlocking}
         animate={menuAnimate}
         width={width}
         height={height}
@@ -382,6 +373,25 @@ function Game() {
       <StatusBar style={dark ? 'light' : 'dark'} />
       {screen}
       {mode !== 'playing' && <BottomNav tab={tab} setTab={setTab} bottomInset={bottomInset} />}
+      {/* DEV-only: open the paywall on demand for testing/screenshots. __DEV__
+          is false in production builds, so this never ships. */}
+      {__DEV__ && mode !== 'playing' && !paywall && (
+        <Pressable
+          onPress={() => setPaywall({ intent: 'skin' })}
+          style={[styles.devPaywall, { bottom: bottomInset + 92 }]}
+        >
+          <Text style={styles.devPaywallText}>PAYWALL</Text>
+        </Pressable>
+      )}
+      {paywall && (
+        <PaywallModal
+          onClose={() => setPaywall(null)}
+          onPurchased={onPaywallPurchased}
+          topInset={topInset}
+          bottomInset={bottomInset}
+          animate={menuAnimate}
+        />
+      )}
     </View>
   );
 }
@@ -411,6 +421,18 @@ export default function App() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  devPaywall: {
+    position: 'absolute',
+    left: 16,
+    zIndex: 70,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: 'rgba(90,169,242,0.9)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.6)',
+  },
+  devPaywallText: { fontFamily: FONT.monoSemi, fontSize: 11, letterSpacing: 1, color: '#fff' },
   exit: {
     position: 'absolute',
     right: 18,
