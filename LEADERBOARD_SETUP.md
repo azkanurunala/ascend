@@ -45,6 +45,34 @@ below, then make a fresh dev build (the native module must compile in).
 - The seeded names in `LeaderboardScreen.js` are only the *offline preview*. Once
   signed in with real entries, they're replaced by live Game Center data.
 
+## Troubleshooting
+
+**"To enable Game Center for your app, you must add the
+`com.apple.developer.game-center` entitlement in Xcode."**
+
+This means the native iOS project being built doesn't carry the entitlement. In
+this **managed (CNG)** project, `ios/` is gitignored and generated from
+`app.json` — so **do NOT add it by hand in Xcode** (the next prebuild wipes it).
+The entitlement lives in `app.json` (`ios.entitlements`). If your *local* `ios/`
+is stale (made by an earlier `expo run:ios` before the entitlement existed),
+regenerate it:
+
+```bash
+npx expo prebuild --clean -p ios      # rewrites ios/ from app.json
+npx expo run:ios                      # rebuild with the entitlement compiled in
+```
+
+Verify it landed: `ios/Ascend/Ascend.entitlements` should contain
+`com.apple.developer.game-center  <true/>`. The same regeneration also re-applies
+the AdMob `GADApplicationIdentifier` + ATT string in `Info.plist` and relinks the
+local `expo-game-center` module.
+
+For **release builds, `eas build` always prebuilds fresh** from `app.json`, so the
+entitlement is included automatically and EAS auto-syncs the Game Center
+capability onto the App ID. If a profile error persists, manually enable
+**Game Center** on the App ID (`com.ascend.game`) in the Apple Developer portal →
+Identifiers, then rebuild.
+
 ## App Privacy
 Game Center processes a **Game Center player ID** and public **display name**.
 This is generally disclosed under **Identifiers** / **User Content** used for
