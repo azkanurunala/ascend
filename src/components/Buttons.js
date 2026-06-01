@@ -6,9 +6,12 @@ import { Text, Pressable, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ASC, FONT } from '../theme';
 
-export function PrimaryButton({ label, icon, onPress, style, size = 'lg' }) {
+export function PrimaryButton({ label, icon, onPress, disabled, style, size = 'lg' }) {
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.primaryWrap, style, pressed && styles.pressed]}>
+    <Pressable
+      onPress={disabled ? undefined : onPress}
+      style={({ pressed }) => [styles.primaryWrap, style, disabled && { opacity: 0.55 }, pressed && !disabled && styles.pressed]}
+    >
       <LinearGradient
         colors={['#FFFFFF', '#CFEFFF']}
         start={{ x: 0, y: 0 }}

@@ -60,9 +60,24 @@ drives the status-bar style via `onBand`.
 all keys prefixed `ascend.`. `today()` returns a local `YYYY-MM-DD` key powering the daily
 revive reset (1 free + 1 ad revive/day, capped at 2).
 
-**Monetization is mocked** (per the MVP brief): "Unlock $x.xx" instantly grants a skin and
-"Revive — watch ad" instantly revives. Wire to real IAP / ad SDKs for production — and if you do,
-update the App Privacy disclosures accordingly.
+**Monetization is real** (RevenueCat IAP + AdMob rewarded ads). The SDK wrappers are
+`src/iap.js` (RevenueCat: `purchaseSkin`/`restorePurchases`/`syncOwnedSkins`/`fetchPrices`)
+and `src/ads.js` (AdMob rewarded: `initAds`/`preloadRevive`/`showReviveAd`). All keys/IDs
+live in `src/config.js` (placeholders → fill before release; `USE_TEST_ADS=true` until then).
+`App.js` `buy()` runs a real purchase, `reviveNow()` shows the ad for the 2nd daily revive,
+Settings has Restore purchases. Paid skins carry a `productId` in `theme.js`; only `drift`
+is free by default. **Account/dashboard setup + the App Privacy changes are in
+`MONETIZATION_SETUP.md`.** Because AdMob collects a device identifier, the app can no
+longer declare "Data Not Collected".
+
+**Leaderboard is real via Apple Game Center** (iOS-only, no login UI — GameKit auto-auths
+the device Apple ID). Native bridge is a **local Expo module**, `modules/expo-game-center/`
+(Swift/GameKit: authenticate/submitScore/presentLeaderboard/loadTopScores), wrapped by
+`src/leaderboard.js` (graceful no-op fallback). `App.js` signs in on launch + submits on
+game over; `LeaderboardScreen` shows live global top-50 (seeded preview as fallback) + a
+"View in Game Center" button. Entitlement `com.apple.developer.game-center` is in `app.json`;
+leaderboard ID in `config.js`. App Store Connect steps: **`LEADERBOARD_SETUP.md`**. The
+native module requires a fresh dev/EAS build to compile in.
 
 ## Conventions
 

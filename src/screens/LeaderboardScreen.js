@@ -1,14 +1,17 @@
 // ============ LEADERBOARD ============
-// Local top-50 with your rank, friends, weekly reset (PRD §6/§7).
-// Ported & expanded from ascend-screens.jsx <LeaderboardScreen> (16 → 50 seed).
+// Real global board via Apple Game Center when signed in; otherwise a seeded
+// local preview so the screen is never empty. A "View in Game Center" button
+// opens Apple's native board. Auth is automatic (device Apple ID) — no login.
 
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import MenuScreen from '../components/MenuScreen';
 import Glass from '../components/Glass';
+import { GhostButton } from '../components/Buttons';
 import { ScreenHead } from './_ScreenHead';
 import { ASC, FONT } from '../theme';
 import { fmtNum } from '../utils/format';
+import { loadTopScores, presentLeaderboard, isLeaderboardAvailable } from '../leaderboard';
 
 // Deterministic local seed (no randomness → stable rankings across renders).
 const NAMES = [
@@ -27,11 +30,35 @@ const LB_SEED = NAMES.map((name, i) => ({
 }));
 
 export default function LeaderboardScreen({ best, width, height, topInset, bottomInset }) {
+  const [live, setLive] = useState(null); // null = loading, [] = none, [...] = real
+
+  // Pull real Game Center scores when the tab opens.
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const rows = await loadTopScores(50);
+      if (alive) setLive(rows);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const isLive = Array.isArray(live) && live.length > 0;
+
+  // Normalize either source to { rank, name, s, me, f }.
   const rows = useMemo(() => {
+    if (isLive) {
+      return live.map((r) => ({ rank: r.rank, name: r.me ? 'You' : r.name, s: r.score, me: r.me, f: false }));
+    }
     const list = [...LB_SEED, { name: 'You', s: best, me: true }].sort((a, b) => b.s - a.s);
     return list.map((r, i) => ({ ...r, rank: i + 1 }));
-  }, [best]);
-  const me = rows.find((r) => r.me);
+  }, [isLive, live, best]);
+
+  // "You" summary card — from live data, or a local placeholder if you're not
+  // ranked yet (no score submitted / outside the top 50).
+  const me = rows.find((r) => r.me) || { rank: null, s: best, me: true };
+  const above = me.rank ? rows.find((r) => r.rank === me.rank - 1) : null;
   const top = rows.slice(0, 50);
 
   return (
@@ -41,26 +68,34 @@ export default function LeaderboardScreen({ best, width, height, topInset, botto
       contentStyle={{ paddingTop: topInset + 30, paddingBottom: bottomInset + 120 }}
     >
       <ScreenHead
-        eyebrow="THIS WEEK · LOCAL"
+        eyebrow={isLive ? 'GLOBAL · GAME CENTER' : 'GAME CENTER · ALL TIME'}
         title="Leaderboard"
-        right={<Text style={styles.resetChip}>Resets Sun</Text>}
+        right={<Text style={styles.resetChip}>{isLive ? 'Live' : 'Best'}</Text>}
       />
 
       {/* your rank */}
       <View style={{ paddingHorizontal: 18, marginBottom: 14 }}>
         <Glass tone="hi" pad={14} radius={20} innerStyle={styles.meCard}>
-          <Text style={styles.meRank}>#{me.rank}</Text>
+          <Text style={styles.meRank}>{me.rank ? `#${me.rank}` : '—'}</Text>
           <View style={{ flex: 1 }}>
             <Text style={styles.meName}>You</Text>
             <Text style={styles.meSub}>
-              {me.rank > 1
-                ? `${fmtNum(rows[me.rank - 2].s - me.s)} to climb a rank`
+              {!me.rank
+                ? 'Play a run to join the board'
+                : above
+                ? `${fmtNum(above.s - me.s)} to climb a rank`
                 : 'Top of the sky'}
             </Text>
           </View>
           <Text style={styles.meScore}>{fmtNum(me.s)}</Text>
         </Glass>
       </View>
+
+      {isLeaderboardAvailable() && (
+        <View style={{ paddingHorizontal: 18, marginBottom: 14 }}>
+          <GhostButton label="View in Game Center" onPress={() => presentLeaderboard()} />
+        </View>
+      )}
 
       {/* list */}
       <View style={{ paddingHorizontal: 18, gap: 7 }}>

@@ -15,6 +15,9 @@
       "bundleIdentifier": "com.ascend.game",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
+      },
+      "entitlements": {
+        "com.apple.developer.game-center": true
       }
     },
     "android": {
@@ -29,6 +32,20 @@
         {
           "backgroundColor": "#0a0a0f",
           "resizeMode": "contain"
+        }
+      ],
+      [
+        "react-native-google-mobile-ads",
+        {
+          "iosAppId": "ca-app-pub-3940256099942544~1458002511",
+          "androidAppId": "ca-app-pub-3940256099942544~3347511713",
+          "userTrackingUsageDescription": "This identifier will be used to deliver personalized ads to you. You can play and earn revives without allowing tracking."
+        }
+      ],
+      [
+        "expo-tracking-transparency",
+        {
+          "userTrackingPermission": "This identifier will be used to deliver personalized ads to you. You can play and earn revives without allowing tracking."
         }
       ]
     ],

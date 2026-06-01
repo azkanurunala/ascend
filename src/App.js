@@ -3,7 +3,7 @@
 // Ported from ascend-app.jsx and adapted to a real device (no iOS frame).
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, Pressable, StyleSheet, useWindowDimensions, Alert } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFonts } from 'expo-font';
@@ -18,6 +18,9 @@ import { JetBrainsMono_500Medium, JetBrainsMono_600SemiBold } from '@expo-google
 
 import { ASC, ASC_BANDS, skyAt, skinById } from './theme';
 import { LS, today } from './storage';
+import { initAds, showReviveAd, preloadRevive } from './ads';
+import { initIAP, syncOwnedSkins, fetchPrices, purchaseSkin, restorePurchases } from './iap';
+import { authenticateGameCenter, submitScore as submitLeaderboard } from './leaderboard';
 import GameStage from './game/GameStage';
 import HomeScreen from './screens/HomeScreen';
 import LeaderboardScreen from './screens/LeaderboardScreen';
@@ -28,7 +31,7 @@ import BottomNav from './components/BottomNav';
 import TweaksPanel from './components/TweaksPanel';
 import { IconClose } from './components/Icons';
 
-const DEFAULT_OWNED = ['drift', 'ember', 'neon'];
+const DEFAULT_OWNED = ['drift']; // only the free skin; the rest are real IAP
 const DEFAULT_SETTINGS = { sound: true, reduceMotion: false, haptics: true, highQuality: true };
 const DEFAULT_TWEAKS = { difficulty: 'normal', menuMotion: true };
 const REVIVE_CAP = 2; // PRD §15: 1 free + 1 ad per day
@@ -55,6 +58,10 @@ function Game() {
   const [revive, setRevive] = useState({ date: '', used: 0 });
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [tweaks, setTweaks] = useState(DEFAULT_TWEAKS);
+
+  const [prices, setPrices] = useState({}); // skinId -> localized store price
+  const [buying, setBuying] = useState(null); // skinId currently purchasing
+  const [restoring, setRestoring] = useState(false);
 
   // ---- load persisted state once ----
   useEffect(() => {
@@ -96,6 +103,28 @@ function Game() {
   useEffect(() => { if (loaded) LS.set('settings', settings); }, [settings, loaded]);
   useEffect(() => { if (loaded) LS.set('tweaks', tweaks); }, [tweaks, loaded]);
 
+  // ---- monetization init (once) ----
+  // Start AdMob + RevenueCat, then reconcile the store's record of owned skins
+  // with local state and pull live localized prices. All no-ops until you fill
+  // in real keys in config.js (see MONETIZATION_SETUP.md).
+  useEffect(() => {
+    let alive = true;
+    initAds();
+    initIAP();
+    authenticateGameCenter(); // signs in with the device's Apple ID — no login UI
+    (async () => {
+      const [storeOwned, livePrices] = await Promise.all([syncOwnedSkins(), fetchPrices()]);
+      if (!alive) return;
+      if (storeOwned.length) {
+        setOwned((o) => Array.from(new Set([...o, ...storeOwned])));
+      }
+      if (livePrices && Object.keys(livePrices).length) setPrices(livePrices);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   // ---- derived ----
   const skin = skinById(equipped);
   const revivesUsed = revive.date === today() ? revive.used : 0;
@@ -114,6 +143,7 @@ function Game() {
     setStatusDark(false);
     setRunKey((k) => k + 1);
     setMode('playing');
+    preloadRevive(); // have a rewarded ad ready by the time the run ends
   }, []);
 
   const handleGameOver = useCallback(
@@ -122,6 +152,7 @@ function Game() {
       setPlaytime((p) => p + (secs || 0));
       setBest((b) => Math.max(b, score));
       setOver({ score, isBest: score > best, band: skyAt(score).name });
+      submitLeaderboard(score); // Game Center keeps the player's highest
     },
     [best]
   );
@@ -132,9 +163,18 @@ function Game() {
     setRunKey((k) => k + 1);
   }, []);
 
-  const reviveNow = useCallback(() => {
+  const reviveNow = useCallback(async () => {
     const used = revive.date === today() ? revive.used : 0;
     if (used >= REVIVE_CAP) return;
+    // First revive of the day is free; the second requires watching a rewarded
+    // ad. Only consume the revive (and resurrect) if the ad was earned.
+    if (used >= 1) {
+      const earned = await showReviveAd();
+      if (!earned) {
+        Alert.alert('No ad available', 'Couldn’t load a rewarded ad right now. Please try again in a moment.');
+        return;
+      }
+    }
     setRevive({ date: today(), used: used + 1 });
     setOver(null);
     setReviveAt((x) => x + 1);
@@ -148,10 +188,41 @@ function Game() {
   }, []);
 
   // ---- cosmetics / settings ----
-  const buy = useCallback((id) => {
-    setOwned((o) => (o.includes(id) ? o : [...o, id]));
-    setEquipped(id);
-  }, []);
+  const buy = useCallback(
+    async (id) => {
+      if (buying) return;
+      setBuying(id);
+      try {
+        const res = await purchaseSkin(id);
+        if (res.ok) {
+          setOwned((o) => (o.includes(id) ? o : [...o, id]));
+          setEquipped(id);
+        } else if (!res.cancelled) {
+          Alert.alert('Purchase failed', res.error || 'Something went wrong. Please try again.');
+        }
+      } finally {
+        setBuying(null);
+      }
+    },
+    [buying]
+  );
+
+  const restore = useCallback(async () => {
+    if (restoring) return;
+    setRestoring(true);
+    try {
+      const ids = await restorePurchases();
+      if (ids.length) {
+        setOwned((o) => Array.from(new Set([...o, ...ids])));
+        Alert.alert('Purchases restored', `Restored ${ids.length} item${ids.length > 1 ? 's' : ''}.`);
+      } else {
+        Alert.alert('Nothing to restore', 'No previous purchases were found for this Apple ID.');
+      }
+    } finally {
+      setRestoring(false);
+    }
+  }, [restoring]);
+
   const equip = useCallback((id) => setEquipped(id), []);
   const toggleSetting = useCallback((k) => setSettings((s) => ({ ...s, [k]: !s[k] })), []);
   const setTweak = useCallback((k, v) => setTweaks((t) => ({ ...t, [k]: v })), []);
@@ -247,6 +318,8 @@ function Game() {
         equipped={equipped}
         onEquip={equip}
         onBuy={buy}
+        prices={prices}
+        buying={buying}
         animate={menuAnimate}
         width={width}
         height={height}
@@ -260,6 +333,8 @@ function Game() {
         settings={settings}
         onToggle={toggleSetting}
         onReset={resetAll}
+        onRestore={restore}
+        restoring={restoring}
         width={width}
         height={height}
         topInset={topInset}

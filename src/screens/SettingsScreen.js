@@ -26,7 +26,7 @@ function Row({ label, sub, value, onToggle, last }) {
   );
 }
 
-export default function SettingsScreen({ settings, onToggle, onReset, width, height, topInset, bottomInset }) {
+export default function SettingsScreen({ settings, onToggle, onReset, onRestore, restoring, width, height, topInset, bottomInset }) {
   const [confirm, setConfirm] = useState(false);
   return (
     <MenuScreen
@@ -42,6 +42,13 @@ export default function SettingsScreen({ settings, onToggle, onReset, width, hei
         <Row label="Haptics" sub="Subtle taps on collision" value={settings.haptics} onToggle={() => onToggle('haptics')} />
         <Row label="Graphics quality" sub="Particles, stars and blur" value={settings.highQuality} onToggle={() => onToggle('highQuality')} last />
       </Glass>
+
+      <GhostButton
+        label={restoring ? 'Restoring…' : 'Restore purchases'}
+        disabled={restoring}
+        onPress={onRestore}
+        style={{ marginBottom: 16 }}
+      />
 
       <Glass tone="reg" pad={16} radius={22} style={{ marginBottom: 16 }}>
         <Text style={styles.aboutTitle}>Ascend</Text>

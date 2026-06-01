@@ -14,6 +14,15 @@
 - Bundle ID: `com.ascend.game`. Apple Team `JWYH3R2628` (individual).
 - Icon generator: `scripts/gen-icon.js` (pure Node, no deps) → `assets/icon.png`.
 - App Store copy draft: `APP_STORE_LISTING.md`.
+- **Monetization is REAL** as of 2026-06-01: RevenueCat IAP (`react-native-purchases`,
+  5 non-consumable skins) + AdMob rewarded ad (`react-native-google-mobile-ads`) for the
+  2nd daily revive, + `expo-tracking-transparency`. Wrappers: `src/iap.js`, `src/ads.js`;
+  keys in `src/config.js` (placeholders, `USE_TEST_ADS=true`). Account/dashboard setup +
+  App Privacy changes: **`MONETIZATION_SETUP.md`**. Can no longer declare "Data Not Collected".
+- **Real leaderboard via Apple Game Center** (iOS-only, no login UI): local Expo module
+  `modules/expo-game-center/` (Swift/GameKit), wrapper `src/leaderboard.js`, entitlement in
+  `app.json`, ID in `config.js`. Setup: **`LEADERBOARD_SETUP.md`**. Needs a fresh native build.
+- Support + Privacy Policy pages: `docs/index.html` / `docs/privacy.html` (host on GitHub Pages).
 
 ## Deploy to the App Store (EAS)
 1. Confirm prereqs: paid Apple Developer account; icon 1024×1024 **no alpha**; target (TestFlight vs release).

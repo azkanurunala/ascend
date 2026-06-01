@@ -59,14 +59,17 @@ export function skyAt(alt) {
 }
 
 // Ball cosmetics. core = orb fill, glow = halo color, trail = particle color,
-// price 0 = owned by default. rainbow = animated hue.
+// price 0 = owned by default (no productId). rainbow = animated hue.
+// `productId` must match the non-consumable IAP set up in App Store Connect and
+// imported into RevenueCat; `price` is the fallback display value (the live,
+// localized store price replaces it at runtime when IAP is configured).
 export const ASC_SKINS = [
   { id: 'drift', name: 'Drift', core: '#FFFFFF', glow: '#BFE3FF', trail: '#CFE8FF', price: 0, tag: 'Default' },
-  { id: 'ember', name: 'Ember', core: '#FFB85C', glow: '#FF7A3D', trail: '#FFC36B', price: 0.99, tag: 'Warm' },
-  { id: 'neon', name: 'Neon', core: '#7CFFE0', glow: '#1BE3C0', trail: '#9BFFEC', price: 0.99, tag: 'Bright' },
-  { id: 'amethyst', name: 'Amethyst', core: '#C9AEFF', glow: '#8C5CF5', trail: '#D7C2FF', price: 1.99, tag: 'Glow' },
-  { id: 'rose', name: 'Rosegold', core: '#FFC7D6', glow: '#F2719B', trail: '#FFD7E2', price: 1.99, tag: 'Soft' },
-  { id: 'aurora', name: 'Aurora', core: '#9CFFC9', glow: '#5AA9F2', trail: '#B6FFE0', price: 2.99, tag: 'Rare', rainbow: true },
+  { id: 'ember', name: 'Ember', core: '#FFB85C', glow: '#FF7A3D', trail: '#FFC36B', price: 0.99, tag: 'Warm', productId: 'com.ascend.game.skin.ember' },
+  { id: 'neon', name: 'Neon', core: '#7CFFE0', glow: '#1BE3C0', trail: '#9BFFEC', price: 0.99, tag: 'Bright', productId: 'com.ascend.game.skin.neon' },
+  { id: 'amethyst', name: 'Amethyst', core: '#C9AEFF', glow: '#8C5CF5', trail: '#D7C2FF', price: 1.99, tag: 'Glow', productId: 'com.ascend.game.skin.amethyst' },
+  { id: 'rose', name: 'Rosegold', core: '#FFC7D6', glow: '#F2719B', trail: '#FFD7E2', price: 1.99, tag: 'Soft', productId: 'com.ascend.game.skin.rose' },
+  { id: 'aurora', name: 'Aurora', core: '#9CFFC9', glow: '#5AA9F2', trail: '#B6FFE0', price: 2.99, tag: 'Rare', rainbow: true, productId: 'com.ascend.game.skin.aurora' },
 ];
 
 export function skinById(id) {

@@ -68,11 +68,16 @@ First launch! Climb from the meadow to orbit in this one-tap arcade challenge. U
 - **Privacy Policy URL:** (required) — even if you collect nothing, you must host a short policy
 
 ### App Privacy answers (review before submitting)
-- If the app collects **no** personal data and has **no** analytics/ads SDK → declare "Data Not Collected".
-- ⚠️ The code references a daily **revive via ad** and **paid orb skins (IAP)**. If you ship ads or IAP:
-  - You must add the relevant SDK and declare data collection (ads usually collect Device ID / usage).
-  - Configure In-App Purchases in App Store Connect (the skin price tiers) before/with submission.
-  - If ads/IAP are NOT in the v1.0 build, leave them out of the privacy form and disclosures.
+⚠️ v1.0 now ships **real AdMob rewarded ads + RevenueCat IAP** — you can **NOT** declare
+"Data Not Collected". Full toggle-by-toggle guidance is in **`MONETIZATION_SETUP.md` §D**.
+Summary:
+- **Identifiers → Device ID** — Third-Party Advertising (AdMob).
+- **Purchases** — purchase history (IAP), App Functionality.
+- **Usage Data** — product interaction (AdMob measurement), Advertising.
+- Mark that the app **contains ads** in the age-rating questionnaire.
+- **Privacy Policy URL is required** — host `docs/privacy.html` (GitHub Pages) and use that URL.
+- Create the 5 IAP products + sign the Paid Apps Agreement, and **add the IAPs to the
+  version** so they're reviewed alongside the build.
 
 ### Screenshots (required — capture from the simulator with Cmd+S)
 Minimum one set at iPhone 6.7" (1290×2796). Suggested shots:

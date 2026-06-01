@@ -14,11 +14,14 @@ import { IconCheck, IconLock } from '../components/Icons';
 import { ASC, FONT, ASC_SKINS, skinById } from '../theme';
 import { fmtPrice } from '../utils/format';
 
-export default function CosmeticsScreen({ owned, equipped, onEquip, onBuy, animate, width, height, topInset, bottomInset }) {
+export default function CosmeticsScreen({ owned, equipped, onEquip, onBuy, prices = {}, buying, animate, width, height, topInset, bottomInset }) {
   const [sel, setSel] = useState(equipped);
   const skin = skinById(sel);
   const isOwned = owned.includes(skin.id);
   const isEquipped = equipped === skin.id;
+  const isBuying = buying === skin.id;
+  // Localized store price when IAP is live; fall back to the static price.
+  const priceFor = (s) => prices[s.id] || fmtPrice(s.price);
 
   return (
     <MenuScreen
@@ -47,7 +50,12 @@ export default function CosmeticsScreen({ owned, equipped, onEquip, onBuy, anima
             ) : isOwned ? (
               <PrimaryButton size="sm" label="Equip" onPress={() => onEquip(skin.id)} />
             ) : (
-              <PrimaryButton size="sm" label={`Unlock · ${fmtPrice(skin.price)}`} onPress={() => onBuy(skin.id)} />
+              <PrimaryButton
+                size="sm"
+                label={isBuying ? 'Purchasing…' : `Unlock · ${priceFor(skin)}`}
+                disabled={!!buying}
+                onPress={() => onBuy(skin.id)}
+              />
             )}
           </View>
         </Glass>
@@ -64,7 +72,7 @@ export default function CosmeticsScreen({ owned, equipped, onEquip, onBuy, anima
               <Orb skin={s} size={42} />
               <Text style={styles.cellName}>{s.name}</Text>
               <Text style={[styles.cellState, { color: eq ? ASC.mint : own ? ASC.ink3 : ASC.sky }]}>
-                {eq ? 'EQUIPPED' : own ? 'OWNED' : fmtPrice(s.price)}
+                {eq ? 'EQUIPPED' : own ? 'OWNED' : priceFor(s)}
               </Text>
               {!own && (
                 <View style={styles.lock}>
