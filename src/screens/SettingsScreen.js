@@ -26,7 +26,7 @@ function Row({ label, sub, value, onToggle, last }) {
   );
 }
 
-export default function SettingsScreen({ settings, onToggle, onReset, onRestore, restoring, width, height, topInset, bottomInset }) {
+export default function SettingsScreen({ settings, onToggle, onReset, onRestore, restoring, pro, onManage, storeAvailable, width, height, topInset, bottomInset }) {
   const [confirm, setConfirm] = useState(false);
   return (
     <MenuScreen
@@ -43,12 +43,31 @@ export default function SettingsScreen({ settings, onToggle, onReset, onRestore,
         <Row label="Graphics quality" sub="Particles, stars and blur" value={settings.highQuality} onToggle={() => onToggle('highQuality')} last />
       </Glass>
 
-      <GhostButton
-        label={restoring ? 'Restoring…' : 'Restore purchases'}
-        disabled={restoring}
-        onPress={onRestore}
-        style={{ marginBottom: 16 }}
-      />
+      {/* Ascend Pro */}
+      <Glass tone="hi" pad={16} radius={22} style={{ marginBottom: 16 }}>
+        <View style={styles.proRow}>
+          <Text style={styles.proTitle}>Ascend Pro</Text>
+          <Text style={[styles.proState, { color: pro ? ASC.mint : ASC.ink3 }]}>
+            {pro ? 'ACTIVE' : 'NOT ACTIVE'}
+          </Text>
+        </View>
+        <Text style={styles.aboutBody}>
+          {pro
+            ? 'Thanks for your support — every orb skin is unlocked and revives are free.'
+            : 'Unlock every orb skin and free revives with a one-time purchase.'}
+        </Text>
+        {storeAvailable && (
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 14 }}>
+            <GhostButton
+              label={restoring ? 'Restoring…' : 'Restore'}
+              disabled={restoring}
+              onPress={onRestore}
+              style={{ flex: 1 }}
+            />
+            <GhostButton label="Manage purchases" onPress={onManage} style={{ flex: 1 }} />
+          </View>
+        )}
+      </Glass>
 
       <Glass tone="reg" pad={16} radius={22} style={{ marginBottom: 16 }}>
         <Text style={styles.aboutTitle}>Ascend</Text>
@@ -92,6 +111,10 @@ const styles = StyleSheet.create({
   rowLabel: { fontFamily: FONT.sansSemi, fontSize: 14.5, color: ASC.ink },
   rowSub: { fontFamily: FONT.sans, fontSize: 12, color: ASC.ink2, marginTop: 1 },
   sep: { height: 1, backgroundColor: 'rgba(255,255,255,0.5)', marginHorizontal: 16 },
+
+  proRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
+  proTitle: { fontFamily: FONT.sansBold, fontSize: 15, color: ASC.ink },
+  proState: { fontFamily: FONT.monoSemi, fontSize: 10.5, letterSpacing: 1 },
 
   aboutTitle: { fontFamily: FONT.sansBold, fontSize: 14.5, color: ASC.ink, marginBottom: 4 },
   aboutBody: { fontFamily: FONT.sans, fontSize: 12.5, color: ASC.ink2, lineHeight: 19 },

@@ -60,15 +60,18 @@ drives the status-bar style via `onBand`.
 all keys prefixed `ascend.`. `today()` returns a local `YYYY-MM-DD` key powering the daily
 revive reset (1 free + 1 ad revive/day, capped at 2).
 
-**Monetization is real** (RevenueCat IAP + AdMob rewarded ads). The SDK wrappers are
-`src/iap.js` (RevenueCat: `purchaseSkin`/`restorePurchases`/`syncOwnedSkins`/`fetchPrices`)
-and `src/ads.js` (AdMob rewarded: `initAds`/`preloadRevive`/`showReviveAd`). All keys/IDs
-live in `src/config.js` (placeholders → fill before release; `USE_TEST_ADS=true` until then).
-`App.js` `buy()` runs a real purchase, `reviveNow()` shows the ad for the 2nd daily revive,
-Settings has Restore purchases. Paid skins carry a `productId` in `theme.js`; only `drift`
-is free by default. **Account/dashboard setup + the App Privacy changes are in
-`MONETIZATION_SETUP.md`.** Because AdMob collects a device identifier, the app can no
-longer declare "Data Not Collected".
+**Monetization is real** (RevenueCat IAP + AdMob rewarded ads). Premium is a single
+**Ascend Pro** lifetime unlock (entitlement `Ascend Pro`) that unlocks all skins + makes
+revives free. `src/iap.js` is the RevenueCat hub (`initIAP` with customer-info listener,
+`getProStatus`, `presentPaywall`, `presentCustomerCenter`, `restorePurchases`,
+`getOfferingPrice`) using the hosted **Paywall** + **Customer Center** (`react-native-purchases-ui`).
+`src/ads.js` is the AdMob rewarded wrapper (`initAds`/`preloadRevive`/`showReviveAd`). All
+keys/IDs live in `src/config.js` (`REVENUECAT_IOS_KEY` is a `test_…` sandbox key → swap for
+`appl_…` before release; `USE_TEST_ADS=true` until then). In `App.js`, `pro` is driven by the
+RevenueCat listener; `owned = pro ? all skins : ['drift']`; locked skins open the paywall;
+`reviveNow()` skips the ad when Pro. **Dashboard setup (entitlement/product/offering/paywall/
+customer-center) + App Privacy changes are in `MONETIZATION_SETUP.md`.** Because AdMob collects
+a device identifier, the app can no longer declare "Data Not Collected".
 
 **Leaderboard is real via Apple Game Center** (iOS-only, no login UI — GameKit auto-auths
 the device Apple ID). Native bridge is a **local Expo module**, `modules/expo-game-center/`

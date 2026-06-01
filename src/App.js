@@ -16,10 +16,18 @@ import {
 } from '@expo-google-fonts/plus-jakarta-sans';
 import { JetBrainsMono_500Medium, JetBrainsMono_600SemiBold } from '@expo-google-fonts/jetbrains-mono';
 
-import { ASC, ASC_BANDS, skyAt, skinById } from './theme';
+import { ASC, ASC_BANDS, ASC_SKINS, skyAt, skinById } from './theme';
 import { LS, today } from './storage';
 import { initAds, showReviveAd, preloadRevive } from './ads';
-import { initIAP, syncOwnedSkins, fetchPrices, purchaseSkin, restorePurchases } from './iap';
+import {
+  initIAP,
+  getProStatus,
+  presentPaywall,
+  presentCustomerCenter,
+  restorePurchases,
+  getOfferingPrice,
+  isStoreAvailable,
+} from './iap';
 import { authenticateGameCenter, submitScore as submitLeaderboard } from './leaderboard';
 import GameStage from './game/GameStage';
 import HomeScreen from './screens/HomeScreen';
@@ -31,7 +39,8 @@ import BottomNav from './components/BottomNav';
 import TweaksPanel from './components/TweaksPanel';
 import { IconClose } from './components/Icons';
 
-const DEFAULT_OWNED = ['drift']; // only the free skin; the rest are real IAP
+const DEFAULT_OWNED = ['drift']; // free skin; the rest unlock with Ascend Pro
+const ALL_SKIN_IDS = ASC_SKINS.map((s) => s.id);
 const DEFAULT_SETTINGS = { sound: true, reduceMotion: false, haptics: true, highQuality: true };
 const DEFAULT_TWEAKS = { difficulty: 'normal', menuMotion: true };
 const REVIVE_CAP = 2; // PRD §15: 1 free + 1 ad per day
@@ -53,14 +62,15 @@ function Game() {
   const [best, setBest] = useState(0);
   const [games, setGames] = useState(0);
   const [playtime, setPlaytime] = useState(0);
-  const [owned, setOwned] = useState(DEFAULT_OWNED);
   const [equipped, setEquipped] = useState('drift');
   const [revive, setRevive] = useState({ date: '', used: 0 });
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [tweaks, setTweaks] = useState(DEFAULT_TWEAKS);
 
-  const [prices, setPrices] = useState({}); // skinId -> localized store price
-  const [buying, setBuying] = useState(null); // skinId currently purchasing
+  // Ascend Pro entitlement (RevenueCat is the source of truth — not persisted).
+  const [pro, setPro] = useState(false);
+  const [proPrice, setProPrice] = useState(null); // localized lifetime price
+  const [unlocking, setUnlocking] = useState(false);
   const [restoring, setRestoring] = useState(false);
 
   // ---- load persisted state once ----
@@ -71,7 +81,6 @@ function Game() {
         ['best', 0],
         ['games', 0],
         ['playtime', 0],
-        ['owned', DEFAULT_OWNED],
         ['skin', 'drift'],
         ['revive', { date: '', used: 0 }],
         ['settings', DEFAULT_SETTINGS],
@@ -81,7 +90,6 @@ function Game() {
       setBest(s.best);
       setGames(s.games);
       setPlaytime(s.playtime);
-      setOwned(s.owned);
       setEquipped(s.skin);
       setRevive(s.revive);
       setSettings({ ...DEFAULT_SETTINGS, ...s.settings });
@@ -97,28 +105,28 @@ function Game() {
   useEffect(() => { if (loaded) LS.set('best', best); }, [best, loaded]);
   useEffect(() => { if (loaded) LS.set('games', games); }, [games, loaded]);
   useEffect(() => { if (loaded) LS.set('playtime', playtime); }, [playtime, loaded]);
-  useEffect(() => { if (loaded) LS.set('owned', owned); }, [owned, loaded]);
   useEffect(() => { if (loaded) LS.set('skin', equipped); }, [equipped, loaded]);
   useEffect(() => { if (loaded) LS.set('revive', revive); }, [revive, loaded]);
   useEffect(() => { if (loaded) LS.set('settings', settings); }, [settings, loaded]);
   useEffect(() => { if (loaded) LS.set('tweaks', tweaks); }, [tweaks, loaded]);
 
   // ---- monetization init (once) ----
-  // Start AdMob + RevenueCat, then reconcile the store's record of owned skins
-  // with local state and pull live localized prices. All no-ops until you fill
-  // in real keys in config.js (see MONETIZATION_SETUP.md).
+  // Start AdMob + Game Center, configure RevenueCat with a customer-info
+  // listener (the source of truth for Ascend Pro), and fetch the current Pro
+  // status + lifetime price. All no-ops until real keys are set in config.js
+  // (see MONETIZATION_SETUP.md).
   useEffect(() => {
     let alive = true;
     initAds();
-    initIAP();
     authenticateGameCenter(); // signs in with the device's Apple ID — no login UI
+    initIAP((isPro) => {
+      if (alive) setPro(isPro);
+    });
     (async () => {
-      const [storeOwned, livePrices] = await Promise.all([syncOwnedSkins(), fetchPrices()]);
+      const [proNow, price] = await Promise.all([getProStatus(), getOfferingPrice()]);
       if (!alive) return;
-      if (storeOwned.length) {
-        setOwned((o) => Array.from(new Set([...o, ...storeOwned])));
-      }
-      if (livePrices && Object.keys(livePrices).length) setPrices(livePrices);
+      setPro(proNow);
+      if (price) setProPrice(price);
     })();
     return () => {
       alive = false;
@@ -126,12 +134,14 @@ function Game() {
   }, []);
 
   // ---- derived ----
-  const skin = skinById(equipped);
+  // Ascend Pro unlocks every skin; otherwise just the free default.
+  const owned = pro ? ALL_SKIN_IDS : DEFAULT_OWNED;
+  const skin = skinById(owned.includes(equipped) ? equipped : 'drift');
   const revivesUsed = revive.date === today() ? revive.used : 0;
   const reviveReady = revivesUsed < REVIVE_CAP;
   const reviveLabel = !reviveReady
     ? 'Revive used today'
-    : revivesUsed === 0
+    : revivesUsed === 0 || pro
     ? 'Revive — free'
     : 'Revive — watch ad';
   const topBand = best > 0 ? skyAt(best).name : '—';
@@ -166,9 +176,10 @@ function Game() {
   const reviveNow = useCallback(async () => {
     const used = revive.date === today() ? revive.used : 0;
     if (used >= REVIVE_CAP) return;
-    // First revive of the day is free; the second requires watching a rewarded
-    // ad. Only consume the revive (and resurrect) if the ad was earned.
-    if (used >= 1) {
+    // First revive of the day is free. The second requires a rewarded ad —
+    // unless the player has Ascend Pro, which makes both revives free. Only
+    // consume the revive (and resurrect) if the ad was actually earned.
+    if (used >= 1 && !pro) {
       const earned = await showReviveAd();
       if (!earned) {
         Alert.alert('No ad available', 'Couldn’t load a rewarded ad right now. Please try again in a moment.');
@@ -178,7 +189,7 @@ function Game() {
     setRevive({ date: today(), used: used + 1 });
     setOver(null);
     setReviveAt((x) => x + 1);
-  }, [revive]);
+  }, [revive, pro]);
 
   const goHome = useCallback(() => {
     setOver(null);
@@ -188,49 +199,57 @@ function Game() {
   }, []);
 
   // ---- cosmetics / settings ----
-  const buy = useCallback(
-    async (id) => {
-      if (buying) return;
-      setBuying(id);
+  // Tapping a locked skin (or "Unlock Ascend Pro") opens the RevenueCat paywall.
+  // The customer-info listener flips `pro`; we also optimistically set it so the
+  // newly-unlocked skin can be equipped immediately.
+  const unlockPro = useCallback(
+    async (equipId) => {
+      if (unlocking) return;
+      setUnlocking(true);
       try {
-        const res = await purchaseSkin(id);
-        if (res.ok) {
-          setOwned((o) => (o.includes(id) ? o : [...o, id]));
-          setEquipped(id);
-        } else if (!res.cancelled) {
-          Alert.alert('Purchase failed', res.error || 'Something went wrong. Please try again.');
+        const { purchased } = await presentPaywall();
+        if (purchased) {
+          setPro(true);
+          if (equipId) setEquipped(equipId);
         }
       } finally {
-        setBuying(null);
+        setUnlocking(false);
       }
     },
-    [buying]
+    [unlocking]
   );
 
   const restore = useCallback(async () => {
     if (restoring) return;
     setRestoring(true);
     try {
-      const ids = await restorePurchases();
-      if (ids.length) {
-        setOwned((o) => Array.from(new Set([...o, ...ids])));
-        Alert.alert('Purchases restored', `Restored ${ids.length} item${ids.length > 1 ? 's' : ''}.`);
-      } else {
-        Alert.alert('Nothing to restore', 'No previous purchases were found for this Apple ID.');
-      }
+      const isPro = await restorePurchases();
+      setPro(isPro);
+      Alert.alert(
+        isPro ? 'Purchases restored' : 'Nothing to restore',
+        isPro
+          ? 'Ascend Pro is active on this Apple ID.'
+          : 'No previous purchases were found for this Apple ID.'
+      );
     } finally {
       setRestoring(false);
     }
   }, [restoring]);
 
-  const equip = useCallback((id) => setEquipped(id), []);
+  const manageSubscription = useCallback(() => {
+    presentCustomerCenter();
+  }, []);
+
+  // Equip only skins the player owns (all of them once Pro is active).
+  const equip = useCallback((id) => {
+    if (id === 'drift' || pro) setEquipped(id);
+  }, [pro]);
   const toggleSetting = useCallback((k) => setSettings((s) => ({ ...s, [k]: !s[k] })), []);
   const setTweak = useCallback((k, v) => setTweaks((t) => ({ ...t, [k]: v })), []);
   const resetAll = useCallback(() => {
     setBest(0);
     setGames(0);
     setPlaytime(0);
-    setOwned(DEFAULT_OWNED);
     setEquipped('drift');
     setRevive({ date: '', used: 0 });
   }, []);
@@ -317,9 +336,10 @@ function Game() {
         owned={owned}
         equipped={equipped}
         onEquip={equip}
-        onBuy={buy}
-        prices={prices}
-        buying={buying}
+        onUnlock={unlockPro}
+        pro={pro}
+        proPrice={proPrice}
+        unlocking={unlocking}
         animate={menuAnimate}
         width={width}
         height={height}
@@ -335,6 +355,9 @@ function Game() {
         onReset={resetAll}
         onRestore={restore}
         restoring={restoring}
+        pro={pro}
+        onManage={manageSubscription}
+        storeAvailable={isStoreAvailable()}
         width={width}
         height={height}
         topInset={topInset}

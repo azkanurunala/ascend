@@ -7,10 +7,23 @@
 // See MONETIZATION_SETUP.md for the step-by-step account checklist.
 
 // --- RevenueCat (in-app purchases) -----------------------------------------
-// Project → API keys → "Public app-specific API Key" for the Apple App Store.
-// Looks like: appl_xxxxxxxxxxxxxxxxxxxxxxxxxx
-export const REVENUECAT_IOS_KEY = 'REPLACE_ME_revenuecat_apple_key';
+// Public SDK key (safe to embed). Project → API keys → "Public app-specific
+// API Key". For the real App Store this MUST be the Apple key `appl_…`.
+//
+// ⚠️ The value below is a RevenueCat *Test Store / sandbox* key (`test_…`). It
+// lets you exercise the paywall + entitlement flow in development, but it does
+// NOT transact against the real App Store. Before the production build, replace
+// it with the `appl_…` key from your Apple app in RevenueCat → API Keys.
+export const REVENUECAT_IOS_KEY = 'test_GVPpCkTVxwamqQtoXPeufvuDtof';
 export const REVENUECAT_ANDROID_KEY = 'REPLACE_ME_revenuecat_google_key';
+
+// The entitlement that unlocks premium content. MUST match the entitlement
+// identifier in RevenueCat EXACTLY (including the space and capitalization).
+export const ENTITLEMENT_ID = 'Ascend Pro';
+
+// Optional: the Offering identifier to show in the paywall. Leave null to use
+// the "current" offering you set as default in the RevenueCat dashboard.
+export const OFFERING_ID = null;
 
 // --- Google AdMob (rewarded revive ad) -------------------------------------
 // AdMob → Apps → your app → App ID (ca-app-pub-XXXX~YYYY) and the rewarded

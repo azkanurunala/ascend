@@ -9,44 +9,63 @@ show, and purchases fail gracefully with an alert (no crash). That's expected.
 
 ---
 
-## What's already done in code
-- `src/config.js` — all keys/IDs live here (placeholders today).
-- `src/ads.js` — AdMob rewarded ad; powers the 2nd daily revive ("watch ad").
-- `src/iap.js` — RevenueCat non-consumable skins + restore.
-- `src/App.js` — `buy()` runs a real purchase; `reviveNow()` shows the ad; Settings
-  has **Restore purchases**; owned skins reconcile with the store on launch.
-- `theme.js` — each paid skin has a `productId` (`com.ascend.game.skin.<id>`).
-- `app.json` — AdMob + App Tracking Transparency plugins (with test app IDs).
+## The model: "Ascend Pro" (one lifetime unlock)
 
-The **only free skin is `drift`**. Ember, Neon, Amethyst, Rosegold and Aurora are
-now real purchases (was a mock freebie before).
+Instead of selling skins individually, a single **Ascend Pro** lifetime purchase
+grants the **`Ascend Pro` entitlement**, which unlocks **every orb skin** and
+makes **revives free** (no ad). Selling is done through RevenueCat's **hosted
+Paywall**; managing/restoring through the **Customer Center**. Prices and the
+product list live in the RevenueCat/Apple dashboards — the app hardcodes neither.
+
+## What's already done in code
+- `src/config.js` — `REVENUECAT_IOS_KEY` (currently a `test_…` sandbox key),
+  `ENTITLEMENT_ID = 'Ascend Pro'`, `OFFERING_ID`, AdMob IDs.
+- `src/iap.js` — RevenueCat hub: `initIAP` (configure + customer-info listener),
+  `getProStatus`, `presentPaywall`, `presentCustomerCenter`, `restorePurchases`,
+  `getOfferingPrice`.
+- `src/App.js` — `pro` state driven by the RevenueCat listener; owned skins =
+  all skins when Pro; locked skins / "Unlock Ascend Pro" open the **Paywall**;
+  Pro skips the revive ad.
+- `src/screens/CosmeticsScreen.js` — locked skins show **PRO**, unlock via paywall.
+- `src/screens/SettingsScreen.js` — Ascend Pro status + **Restore** + **Manage
+  purchases** (Customer Center).
+- `app.json` — AdMob + App Tracking Transparency plugins (test app IDs).
+
+Only `drift` is free; the other skins unlock with Ascend Pro.
 
 ---
 
-## A. In-App Purchases (RevenueCat + App Store Connect)
+## A. In-App Purchase: Ascend Pro (RevenueCat + App Store Connect)
 
 1. **Sign Apple's Paid Apps Agreement.** App Store Connect → Business → Agreements.
    *IAP will not work at all until this is "Active".*
-2. **Create 5 non-consumable products** in App Store Connect → your app → In-App
-   Purchases. Use these exact product IDs (they must match `theme.js`):
-   | Skin | Product ID | Suggested price |
-   |------|-----------|-----------------|
-   | Ember | `com.ascend.game.skin.ember` | $0.99 |
-   | Neon | `com.ascend.game.skin.neon` | $0.99 |
-   | Amethyst | `com.ascend.game.skin.amethyst` | $1.99 |
-   | Rosegold | `com.ascend.game.skin.rose` | $1.99 |
-   | Aurora | `com.ascend.game.skin.aurora` | $2.99 |
-   Give each a display name + review screenshot. Status will be "Ready to Submit".
-3. **RevenueCat** (revenuecat.com, free tier): create a Project → add an App for the
-   Apple App Store (bundle `com.ascend.game`). Upload your **App Store Connect API
-   key** (or in-app purchase key) so RevenueCat can validate receipts.
-4. Import/auto-sync the 5 products into RevenueCat. (You don't strictly need
-   Offerings/Entitlements — the code purchases products directly and reads ownership
-   from purchase history — but configuring them does no harm.)
-5. Copy the RevenueCat **Apple public API key** (`appl_…`) into
-   `REVENUECAT_IOS_KEY` in `src/config.js`.
-6. **Test** with a Sandbox Apple ID (App Store Connect → Users and Access → Sandbox
-   Testers) on a real device dev build.
+2. **Create the product** in App Store Connect → your app → In-App Purchases →
+   **non-consumable**:
+   - **Product ID:** `lifetime` (or `com.ascend.game.lifetime` — just match it in
+     RevenueCat)
+   - Reference name "Ascend Pro Lifetime", a price tier (e.g. $4.99), display name
+     + a review screenshot. Status → "Ready to Submit".
+3. **RevenueCat** (revenuecat.com): create a Project → add an App for the Apple App
+   Store (bundle `com.ascend.game`). Upload the **In-App Purchase key** you
+   generated (the `.p8` + Issuer ID `63f66b92-…` + Key ID `3S946XCN8A`) so it can
+   validate receipts.
+4. In RevenueCat:
+   - **Entitlements** → create one with identifier **`Ascend Pro`** (must match
+     `ENTITLEMENT_ID` in `config.js` *exactly*, including the space).
+   - **Products** → add the `lifetime` product; attach it to the `Ascend Pro`
+     entitlement.
+   - **Offerings** → create an offering (the default "current"), add the `lifetime`
+     product as the **Lifetime** package.
+   - **Paywalls** → design a paywall for that offering (this is what
+     `presentPaywall()` shows). Without a paywall configured, the paywall call
+     returns "not presented".
+   - **Customer Center** → enable/configure it (powers "Manage purchases").
+5. Copy RevenueCat → **API Keys → public Apple key `appl_…`** into
+   `REVENUECAT_IOS_KEY` in `src/config.js` (replacing the `test_…` sandbox key)
+   for the production build.
+6. **Test** with a Sandbox Apple ID (Users and Access → Sandbox Testers) on a real
+   device dev build. The `test_…` key works against RevenueCat's Test Store without
+   App Store Connect, useful for checking the paywall UI early.
 
 ## B. Rewarded Ads (Google AdMob)
 
@@ -64,10 +83,11 @@ now real purchases (was a mock freebie before).
 ## C. Rebuild + resubmit
 1. `git add -A && git commit` (EAS builds from the git snapshot).
 2. `eas build -p ios --profile production` then `eas submit -p ios --profile production`.
-   The native modules (AdMob, Purchases, tracking-transparency) require this fresh
-   build — they can't hot-reload into the old one.
-3. In **App Store Connect**, attach the new build, **add the 5 IAPs to the version**
-   (In-App Purchases section of the version page) so they're reviewed together.
+   The native modules (AdMob, Purchases + Purchases-UI, tracking-transparency,
+   Game Center) require this fresh build — they can't hot-reload into the old one.
+3. In **App Store Connect**, attach the new build, and **add the `lifetime` IAP to
+   the version** (In-App Purchases section of the version page) so it's reviewed
+   together with the app.
 
 ## D. App Privacy form (IMPORTANT — changed)
 You can **no longer** declare "Data Not Collected". With AdMob + IAP, declare:
