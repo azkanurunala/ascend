@@ -24,7 +24,8 @@ import { rgba } from '../utils/color';
 import { IconArrowUp } from '../components/Icons';
 
 const BALL_R = 15;
-const GRAVITY = 1500;
+const GRAVITY = 1500; // pull while descending — keeps the fall weighty
+const GRAVITY_UP = 1250; // lighter pull while rising so the ascent floats, not fights
 const FLAP = 480;
 const MAX_FALL = 820; // terminal velocity so the descent stays controlled, not runaway
 const DIFF = {
@@ -229,8 +230,9 @@ export default function GameStage({
     w.elapsed += dt;
     const d = diff(w.score);
 
-    // physics
-    w.vel += GRAVITY * dt;
+    // physics — lighter gravity on the way up (vel < 0) for a floaty, natural
+    // rise; full gravity on the way down so the descent still feels weighty
+    w.vel += (w.vel < 0 ? GRAVITY_UP : GRAVITY) * dt;
     if (w.vel > MAX_FALL) w.vel = MAX_FALL;
     w.ballY += w.vel * dt;
     w.rot = Math.max(-0.5, Math.min(0.9, w.vel / 900));
