@@ -24,8 +24,9 @@ import { rgba } from '../utils/color';
 import { IconArrowUp } from '../components/Icons';
 
 const BALL_R = 15;
-const GRAVITY = 2000;
-const FLAP = 560;
+const GRAVITY = 1500;
+const FLAP = 480;
+const MAX_FALL = 820; // terminal velocity so the descent stays controlled, not runaway
 const DIFF = {
   chill: { sp: 0.82, gap: 1.12 },
   normal: { sp: 1, gap: 1 },
@@ -230,6 +231,7 @@ export default function GameStage({
 
     // physics
     w.vel += GRAVITY * dt;
+    if (w.vel > MAX_FALL) w.vel = MAX_FALL;
     w.ballY += w.vel * dt;
     w.rot = Math.max(-0.5, Math.min(0.9, w.vel / 900));
 

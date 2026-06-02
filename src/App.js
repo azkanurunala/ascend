@@ -326,7 +326,7 @@ function Game() {
             <IconClose size={16} color={statusDark ? '#fff' : ASC.ink} />
           </Pressable>
         )}
-        {over && (
+        {over && !paywall && (
           <GameOverOverlay
             score={over.score}
             best={best}
