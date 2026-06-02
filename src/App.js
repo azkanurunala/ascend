@@ -27,6 +27,7 @@ import {
   isStoreAvailable,
 } from './iap';
 import { authenticateGameCenter, submitScore as submitLeaderboard } from './leaderboard';
+import { isValidGiftCode } from './giftcodes';
 import GameStage from './game/GameStage';
 import HomeScreen from './screens/HomeScreen';
 import LeaderboardScreen from './screens/LeaderboardScreen';
@@ -46,7 +47,7 @@ const DEFAULT_OWNED = ['drift']; // free skin; the rest unlock with Ascend Pro
 const ALL_SKIN_IDS = ASC_SKINS.map((s) => s.id);
 const DEFAULT_SETTINGS = { sound: true, reduceMotion: false, haptics: true, highQuality: true };
 const DEFAULT_TWEAKS = { difficulty: 'normal', menuMotion: true };
-const FREE_REVIVES_PER_DAY = 1; // free users get 1/day; more requires Ascend Pro
+const FREE_REVIVES_PER_DAY = 3; // 3 free revives/day; beyond that, Ascend Pro (Pro = unlimited)
 
 function Game() {
   const { width, height } = useWindowDimensions();
@@ -71,7 +72,9 @@ function Game() {
   const [tweaks, setTweaks] = useState(DEFAULT_TWEAKS);
 
   // Ascend Pro entitlement (RevenueCat is the source of truth — not persisted).
-  const [pro, setPro] = useState(false);
+  const [entitlementPro, setEntitlementPro] = useState(false); // from RevenueCat
+  const [giftPro, setGiftPro] = useState(false); // unlocked via gift code (local)
+  const pro = entitlementPro || giftPro;
   const [proPrice, setProPrice] = useState(null); // localized lifetime price
   const [paywall, setPaywall] = useState(null); // null | { intent, equip }
   const [restoring, setRestoring] = useState(false);
@@ -88,12 +91,14 @@ function Game() {
         ['revive', { date: '', used: 0 }],
         ['settings', DEFAULT_SETTINGS],
         ['tweaks', DEFAULT_TWEAKS],
+        ['giftPro', false],
       ]);
       if (!alive) return;
       setBest(s.best);
       setGames(s.games);
       setPlaytime(s.playtime);
       setEquipped(s.skin);
+      setGiftPro(!!s.giftPro);
       setRevive(s.revive);
       setSettings({ ...DEFAULT_SETTINGS, ...s.settings });
       setTweaks({ ...DEFAULT_TWEAKS, ...s.tweaks });
@@ -122,12 +127,12 @@ function Game() {
     let alive = true;
     authenticateGameCenter(); // signs in with the device's Apple ID — no login UI
     initIAP((isPro) => {
-      if (alive) setPro(isPro);
+      if (alive) setEntitlementPro(isPro);
     });
     (async () => {
       const [proNow, price] = await Promise.all([getProStatus(), getOfferingPrice()]);
       if (!alive) return;
-      setPro(proNow);
+      setEntitlementPro(proNow);
       if (price) setProPrice(price);
     })();
     return () => {
@@ -202,7 +207,7 @@ function Game() {
   // Paywall reported a successful purchase: flip Pro, then fulfill the intent
   // (resurrect the run, or equip the skin the user was unlocking).
   const onPaywallPurchased = useCallback(() => {
-    setPro(true);
+    setEntitlementPro(true);
     if (paywall?.intent === 'revive') {
       setOver(null);
       setReviveAt((x) => x + 1);
@@ -217,7 +222,7 @@ function Game() {
     setRestoring(true);
     try {
       const isPro = await restorePurchases();
-      setPro(isPro);
+      setEntitlementPro(isPro);
       Alert.alert(
         isPro ? 'Purchases restored' : 'Nothing to restore',
         isPro
@@ -232,6 +237,41 @@ function Game() {
   const manageSubscription = useCallback(() => {
     presentCustomerCenter();
   }, []);
+
+  // Gift code → free Ascend Pro (stored locally). Fulfills the paywall intent if
+  // the code was entered from the paywall (unlock the skin / resurrect the run).
+  const redeemGift = useCallback(
+    (code) => {
+      if (!isValidGiftCode(code)) {
+        Alert.alert('Invalid code', 'That gift code isn’t valid. Double-check it and try again.');
+        return;
+      }
+      setGiftPro(true);
+      LS.set('giftPro', true);
+      if (paywall?.intent === 'revive') {
+        setOver(null);
+        setReviveAt((x) => x + 1);
+      } else if (paywall?.equip) {
+        setEquipped(paywall.equip);
+      }
+      setPaywall(null);
+      Alert.alert('Ascend Pro unlocked! 🎉', 'Every orb skin is yours and revives are unlimited. Thanks for playing!');
+    },
+    [paywall]
+  );
+
+  // iOS text-input dialog to enter a gift code.
+  const promptRedeem = useCallback(() => {
+    Alert.prompt(
+      'Redeem gift code',
+      'Enter your Ascend Pro gift code.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Redeem', onPress: (code) => redeemGift(code) },
+      ],
+      'plain-text'
+    );
+  }, [redeemGift]);
 
   // Equip only skins the player owns (all of them once Pro is active).
   const equip = useCallback((id) => {
@@ -255,7 +295,7 @@ function Game() {
   let screen = null;
   if (mode === 'playing') {
     screen = (
-      <View style={StyleSheet.absoluteFill}>
+      <View style={{ flex: 1 }}>
         <GameStage
           key={runKey}
           skin={skin}
@@ -357,6 +397,7 @@ function Game() {
         restoring={restoring}
         pro={pro}
         onManage={manageSubscription}
+        onRedeem={promptRedeem}
         storeAvailable={isStoreAvailable()}
         width={width}
         height={height}
@@ -387,6 +428,7 @@ function Game() {
         <PaywallModal
           onClose={() => setPaywall(null)}
           onPurchased={onPaywallPurchased}
+          onRedeem={promptRedeem}
           topInset={topInset}
           bottomInset={bottomInset}
           animate={menuAnimate}

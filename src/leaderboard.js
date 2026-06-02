@@ -13,6 +13,7 @@ function gc() {
   try {
     return require('../modules/expo-game-center').default;
   } catch (e) {
+    console.warn('[GameCenter] native module unavailable:', e?.message || e);
     return null;
   }
 }
@@ -24,8 +25,11 @@ export async function authenticateGameCenter() {
   const m = gc();
   if (!m) return false;
   try {
-    return await m.authenticate();
+    const ok = await m.authenticate();
+    console.log('[GameCenter] authenticate ->', ok);
+    return ok;
   } catch (e) {
+    console.warn('[GameCenter] authenticate error:', e?.message || e);
     return false;
   }
 }
@@ -36,6 +40,7 @@ export async function isAuthenticated() {
   try {
     return await m.isAuthenticated();
   } catch (e) {
+    console.warn('[GameCenter] isAuthenticated error:', e?.message || e);
     return false;
   }
 }
@@ -56,9 +61,13 @@ export async function submitScore(score, difficulty) {
 export async function presentLeaderboard(difficulty) {
   const m = gc();
   if (!m) return false;
+  const id = leaderboardIdFor(difficulty);
   try {
-    return await m.presentLeaderboard(leaderboardIdFor(difficulty));
+    const presented = await m.presentLeaderboard(id);
+    console.log('[GameCenter] presentLeaderboard', id, '->', presented);
+    return presented;
   } catch (e) {
+    console.warn('[GameCenter] presentLeaderboard error', id, ':', e?.message || e);
     return false;
   }
 }

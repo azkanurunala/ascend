@@ -26,7 +26,7 @@ function Row({ label, sub, value, onToggle, last }) {
   );
 }
 
-export default function SettingsScreen({ settings, onToggle, tweaks, setTweak, onReset, onRestore, restoring, pro, onManage, storeAvailable, width, height, topInset, bottomInset }) {
+export default function SettingsScreen({ settings, onToggle, tweaks, setTweak, onReset, onRestore, restoring, pro, onManage, onRedeem, storeAvailable, width, height, topInset, bottomInset }) {
   const [confirm, setConfirm] = useState(false);
   return (
     <MenuScreen
@@ -82,6 +82,9 @@ export default function SettingsScreen({ settings, onToggle, tweaks, setTweak, o
             />
             <GhostButton label="Manage purchases" onPress={onManage} style={{ flex: 1 }} />
           </View>
+        )}
+        {!pro && (
+          <GhostButton label="Redeem gift code" onPress={onRedeem} style={{ marginTop: 8 }} />
         )}
       </Glass>
 

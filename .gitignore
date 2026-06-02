@@ -12,3 +12,6 @@ web-build/
 # local design reference (handoff bundle)
 design.gz
 design_extract/
+
+# gift codes (distribute privately, never commit)
+GIFT_CODES.txt

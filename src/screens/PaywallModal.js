@@ -5,7 +5,8 @@
 // instead of RevenueCat's hosted paywall so it matches the rest of the app.
 
 import React, { useEffect, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator, Linking, Alert } from 'react-native';
+import { View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator, Linking, Alert, Modal } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import Glass from '../components/Glass';
 import Orb from '../components/Orb';
@@ -59,7 +60,7 @@ function Tile({ Icon, accent, title, desc }) {
   );
 }
 
-export default function PaywallModal({ onClose, onPurchased, topInset = 24, bottomInset = 16, animate = true }) {
+export default function PaywallModal({ onClose, onPurchased, onRedeem, topInset = 24, bottomInset = 16, animate = true }) {
   const aurora = skinById('aurora');
   const [loading, setLoading] = useState(true);
   const [offer, setOffer] = useState(null); // { pkg, priceString }
@@ -103,8 +104,10 @@ export default function PaywallModal({ onClose, onPurchased, topInset = 24, bott
   const cta = busy ? 'Please wait…' : `Unlock Ascend Pro · ${price}`;
 
   return (
-    <View style={styles.root}>
-      <LinearGradient colors={['#04050F', '#0A1230', '#1A2A6B']} style={StyleSheet.absoluteFill} />
+    <Modal visible transparent animationType="slide" statusBarTranslucent onRequestClose={onClose}>
+      <StatusBar style="light" />
+      <View style={styles.root}>
+        <LinearGradient colors={['#04050F', '#0A1230', '#1A2A6B']} style={StyleSheet.absoluteFill} />
       {/* soft glow bloom behind the orb */}
       <LinearGradient
         colors={['rgba(91,184,255,0.22)', 'rgba(91,184,255,0)']}
@@ -150,6 +153,12 @@ export default function PaywallModal({ onClose, onPurchased, topInset = 24, bott
             <PrimaryButton label={cta} disabled={busy} onPress={buy} style={{ width: '100%' }} />
           )}
 
+          {onRedeem && (
+            <Pressable onPress={onRedeem} hitSlop={8} style={{ alignSelf: 'center', marginTop: 14 }}>
+              <Text style={styles.giftLink}>Have a gift code? Redeem</Text>
+            </Pressable>
+          )}
+
           <Text style={styles.fine}>One-time purchase. Restore on any device signed in to the same Apple ID.</Text>
 
           <View style={styles.links}>
@@ -167,12 +176,13 @@ export default function PaywallModal({ onClose, onPurchased, topInset = 24, bott
           </View>
         </View>
       </ScrollView>
-    </View>
+      </View>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { ...StyleSheet.absoluteFillObject, zIndex: 100 },
+  root: { flex: 1 },
   close: {
     position: 'absolute',
     right: 18,
@@ -210,4 +220,5 @@ const styles = StyleSheet.create({
   links: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, marginTop: 12 },
   link: { fontFamily: FONT.sansSemi, fontSize: 13, color: ASC.inkOn2 },
   linkDot: { color: 'rgba(244,248,255,0.4)' },
+  giftLink: { fontFamily: FONT.sansSemi, fontSize: 13.5, color: ASC.sky, textDecorationLine: 'underline' },
 });

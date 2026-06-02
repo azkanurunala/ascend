@@ -3,7 +3,9 @@
 // Ported from ascend-screens.jsx <GameOverOverlay> (PRD §6 Screen 2).
 
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Modal } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { BlurView } from 'expo-blur';
 import Glass from '../components/Glass';
 import Float from '../components/Float';
 import { PrimaryButton, GhostButton, TextButton } from '../components/Buttons';
@@ -23,8 +25,12 @@ export default function GameOverOverlay({
   animate,
 }) {
   return (
-    <View style={styles.backdrop}>
-      <Float enabled={animate} distance={0} duration={1}>
+    // A full-screen Modal guarantees the overlay fills the whole screen (the same
+    // mechanism the paywall uses); the BlurView frosts the game behind it.
+    <Modal visible transparent animationType="fade" statusBarTranslucent onRequestClose={onHome}>
+      <StatusBar style="light" />
+      <BlurView intensity={50} tint="dark" style={styles.blur}>
+        <Float enabled={animate} distance={0} duration={1}>
         <Glass tone="hi" pad={24} radius={28} style={styles.card} innerStyle={{ alignItems: 'center' }}>
           {isBest ? (
             <View style={styles.bestRow}>
@@ -55,19 +61,19 @@ export default function GameOverOverlay({
 
           <TextButton label="Home" onPress={onHome} style={{ marginTop: 8 }} />
         </Glass>
-      </Float>
-    </View>
+        </Float>
+      </BlurView>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 30,
+  blur: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
-    backgroundColor: 'rgba(8,18,32,0.32)',
+    backgroundColor: 'rgba(6,12,26,0.22)', // subtle scrim so the card pops on the blur
   },
   card: { width: '100%', maxWidth: 340 },
   bestRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },

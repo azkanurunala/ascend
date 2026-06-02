@@ -1,9 +1,9 @@
 // ============ COSMETICS / SKINS ============
-// Ball skins + trail colors, owned/locked/equipped, preview + buy/equip.
-// Ported from ascend-screens.jsx <CosmeticsScreen> (PRD §7 monetization).
+// Orb skins (306 total): preview + a virtualized grid so the full set scrolls
+// smoothly. Pro unlocks everything; locked skins open the paywall.
 
 import React, { useState } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet, FlatList } from 'react-native';
 import MenuScreen from '../components/MenuScreen';
 import Glass from '../components/Glass';
 import Orb from '../components/Orb';
@@ -18,15 +18,10 @@ export default function CosmeticsScreen({ owned, equipped, onEquip, onUnlock, pr
   const skin = skinById(sel);
   const isOwned = owned.includes(skin.id);
   const isEquipped = equipped === skin.id;
-  // Every locked skin unlocks via the single Ascend Pro lifetime purchase.
   const unlockLabel = unlocking ? 'Opening…' : proPrice ? `Unlock Ascend Pro · ${proPrice}` : 'Unlock Ascend Pro';
 
-  return (
-    <MenuScreen
-      width={width}
-      height={height}
-      contentStyle={{ paddingTop: topInset + 30, paddingBottom: bottomInset + 120 }}
-    >
+  const header = (
+    <>
       <ScreenHead eyebrow="COSMETIC · NO EDGE" title="Skins" />
 
       {/* preview */}
@@ -48,39 +43,52 @@ export default function CosmeticsScreen({ owned, equipped, onEquip, onUnlock, pr
             ) : isOwned ? (
               <PrimaryButton size="sm" label="Equip" onPress={() => onEquip(skin.id)} />
             ) : (
-              <PrimaryButton
-                size="sm"
-                label={unlockLabel}
-                disabled={!!unlocking}
-                onPress={() => onUnlock(skin.id)}
-              />
+              <PrimaryButton size="sm" label={unlockLabel} disabled={!!unlocking} onPress={() => onUnlock(skin.id)} />
             )}
           </View>
         </Glass>
       </View>
 
-      {/* grid */}
-      <View style={styles.grid}>
-        {ASC_SKINS.map((s) => {
-          const own = owned.includes(s.id);
-          const eq = equipped === s.id;
-          const on = sel === s.id;
-          return (
-            <Pressable key={s.id} onPress={() => setSel(s.id)} style={[styles.cell, on && styles.cellOn]}>
-              <Orb skin={s} size={42} />
-              <Text style={styles.cellName}>{s.name}</Text>
-              <Text style={[styles.cellState, { color: eq ? ASC.mint : own ? ASC.ink3 : ASC.violet }]}>
-                {eq ? 'EQUIPPED' : own ? 'OWNED' : 'PRO'}
-              </Text>
-              {!own && (
-                <View style={styles.lock}>
-                  <IconLock size={11} color={ASC.ink3} />
-                </View>
-              )}
-            </Pressable>
-          );
-        })}
-      </View>
+      <Text style={styles.gridLabel}>{`ALL SKINS · ${ASC_SKINS.length}`}</Text>
+    </>
+  );
+
+  const renderItem = ({ item: s }) => {
+    const own = owned.includes(s.id);
+    const eq = equipped === s.id;
+    const on = sel === s.id;
+    return (
+      <Pressable onPress={() => setSel(s.id)} style={[styles.cell, on && styles.cellOn]}>
+        <Orb skin={s} size={42} />
+        <Text style={styles.cellName} numberOfLines={1}>{s.name}</Text>
+        <Text style={[styles.cellState, { color: eq ? ASC.mint : own ? ASC.ink3 : ASC.violet }]}>
+          {eq ? 'EQUIPPED' : own ? 'OWNED' : 'PRO'}
+        </Text>
+        {!own && (
+          <View style={styles.lock}>
+            <IconLock size={11} color={ASC.ink3} />
+          </View>
+        )}
+      </Pressable>
+    );
+  };
+
+  return (
+    <MenuScreen width={width} height={height} scroll={false}>
+      <FlatList
+        data={ASC_SKINS}
+        keyExtractor={(s) => s.id}
+        renderItem={renderItem}
+        numColumns={3}
+        ListHeaderComponent={header}
+        columnWrapperStyle={styles.rowWrap}
+        contentContainerStyle={{ paddingTop: topInset + 30, paddingBottom: bottomInset + 120 }}
+        showsVerticalScrollIndicator={false}
+        initialNumToRender={12}
+        maxToRenderPerBatch={12}
+        windowSize={7}
+        removeClippedSubviews
+      />
     </MenuScreen>
   );
 }
@@ -102,9 +110,10 @@ const styles = StyleSheet.create({
   equipped: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 13 },
   equippedText: { fontFamily: FONT.sansBold, fontSize: 14, color: ASC.mint },
 
-  grid: { paddingHorizontal: 18, flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  gridLabel: { fontFamily: FONT.monoSemi, fontSize: 10, letterSpacing: 1.2, color: ASC.ink3, paddingHorizontal: 20, marginBottom: 10 },
+  rowWrap: { gap: 10, paddingHorizontal: 18, marginBottom: 10 },
   cell: {
-    width: '31.5%',
+    flex: 1,
     alignItems: 'center',
     gap: 6,
     paddingTop: 14,

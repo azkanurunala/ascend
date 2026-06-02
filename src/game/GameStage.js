@@ -19,7 +19,7 @@ import {
   vec,
 } from '@shopify/react-native-skia';
 
-import { ASC, FONT, skyAt, mixHex } from '../theme';
+import { ASC, FONT, skyAt } from '../theme';
 import { rgba } from '../utils/color';
 import { IconArrowUp } from '../components/Icons';
 
@@ -31,6 +31,13 @@ const DIFF = {
   normal: { sp: 1, gap: 1 },
   intense: { sp: 1.22, gap: 0.84 },
 };
+
+// Pillar tints — pipes cycle through these so they're colorful, not all clear
+// glass. Each is rendered as colored frosted glass with a glowing edge.
+const PIPE_TINTS = [
+  '#5AA9F2', '#A98CF5', '#4FE0B0', '#F2719B',
+  '#F2B33D', '#7CFFE0', '#FF8A5C', '#9CC9FF',
+];
 
 function fmt(n) {
   return Math.floor(n)
@@ -118,6 +125,7 @@ export default function GameStage({
       vel: 0,
       rot: 0,
       obstacles: [],
+      pipeCount: 0,
       spawnX: W + 60,
       scoreF: 0,
       score: 0,
@@ -152,7 +160,9 @@ export default function GameStage({
     const margin = 64;
     const gapH = d.gapH;
     const gapY = margin + gapH / 2 + Math.random() * (w.H - 2 * margin - gapH - 70);
-    w.obstacles.push({ x: w.spawnX, gapY, gapH, w: 62, passed: false });
+    const tint = PIPE_TINTS[w.pipeCount % PIPE_TINTS.length];
+    w.pipeCount += 1;
+    w.obstacles.push({ x: w.spawnX, gapY, gapH, w: 62, passed: false, tint });
     w.spawnX += d.spacingX;
   }
 
@@ -353,8 +363,11 @@ export default function GameStage({
   const starsAlpha = Math.max(0, Math.min(1, (w.score - 3600) / 1800));
 
   return (
-    <Pressable style={styles.fill} onPressIn={tap}>
-      <Canvas style={{ width: W, height: H }}>
+    // Sky-toned background as a safety net behind the canvas.
+    <Pressable style={[styles.fill, { backgroundColor: sky.bot }]} onPressIn={tap}>
+      {/* flex:1 (not a numeric height) so the Skia surface fills the full screen
+          on the New Architecture — a fixed pixel height under-sizes the canvas. */}
+      <Canvas style={styles.fill}>
         <Group transform={[{ translateX: sx }, { translateY: sy }]}>
           {/* sky */}
           <Rect x={-20} y={-20} width={W + 40} height={H + 40}>
@@ -473,8 +486,12 @@ function Pillar({ o, H, dark }) {
   const r = 16;
   const top = o.gapY - o.gapH / 2;
   const bot = o.gapY + o.gapH / 2;
-  const stroke = dark ? 'rgba(255,255,255,0.30)' : 'rgba(255,255,255,0.7)';
-  const mid = dark ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.34)';
+  // Colored frosted glass: each pipe carries a tint so they're not all clear.
+  const tint = o.tint || '#FFFFFF';
+  const edgeA = dark ? 0.55 : 0.8;
+  const midA = dark ? 0.26 : 0.4;
+  const stroke = rgba(tint, dark ? 0.55 : 0.85);
+  const cap = rgba(tint, dark ? 0.4 : 0.6);
 
   const piece = (key, drawY, drawH, capY) => {
     if (drawH <= 0) return null;
@@ -488,20 +505,20 @@ function Pillar({ o, H, dark }) {
             start={vec(o.x, 0)}
             end={vec(o.x + o.w, 0)}
             positions={[0, 0.5, 1]}
-            colors={['rgba(255,255,255,0.10)', mid, 'rgba(255,255,255,0.08)']}
+            colors={[rgba(tint, midA * 0.7), rgba(tint, edgeA * 0.55), rgba(tint, midA * 0.6)]}
           />
         </RoundedRect>
-        <RoundedRect x={o.x + 0.7} y={ry + 0.7} width={o.w - 1.4} height={rh - 1.4} r={r} style="stroke" strokeWidth={1.4} color={stroke} />
-        {/* inner light streak */}
+        <RoundedRect x={o.x + 0.7} y={ry + 0.7} width={o.w - 1.4} height={rh - 1.4} r={r} style="stroke" strokeWidth={1.6} color={stroke} />
+        {/* inner light streak (kept white for the glass highlight) */}
         <Rect
           x={o.x + o.w * 0.22}
           y={drawY + (key === 'top' ? 0 : 6)}
           width={3}
           height={drawH - 6}
-          color="rgba(255,255,255,0.4)"
+          color="rgba(255,255,255,0.45)"
         />
-        {/* lip cap at the gap end */}
-        <RoundedRect x={o.x - 4} y={capY} width={o.w + 8} height={10} r={5} color={dark ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.5)'} />
+        {/* glowing lip cap at the gap end */}
+        <RoundedRect x={o.x - 4} y={capY} width={o.w + 8} height={10} r={5} color={cap} />
       </Group>
     );
   };
@@ -517,19 +534,26 @@ function Pillar({ o, H, dark }) {
 // ---- ball ------------------------------------------------------------------
 function Ball({ x, y, rot, skin }) {
   const R = BALL_R;
+  const c1 = skin.c1 || skin.core || '#FFFFFF';
+  const c2 = skin.c2 || skin.glow || c1;
+  const halo = skin.glow || c2;
   return (
     <Group transform={[{ translateX: x }, { translateY: y }, { rotate: rot * 0.4 }]}>
-      {/* glow */}
-      <Circle cx={0} cy={0} r={R * 2.4}>
-        <RadialGradient c={vec(0, 0)} r={R * 2.4} positions={[0.15, 1]} colors={[rgba(skin.glow, 0.8), rgba(skin.glow, 0)]} />
+      {/* glow (subtle, tight) */}
+      <Circle cx={0} cy={0} r={R * 1.5}>
+        <RadialGradient c={vec(0, 0)} r={R * 1.5} positions={[0.4, 1]} colors={[rgba(halo, 0.45), rgba(halo, 0)]} />
       </Circle>
-      {/* body */}
+      {/* body — two-color diagonal gradient */}
+      <Circle cx={0} cy={0} r={R}>
+        <LinearGradient start={vec(-R, -R)} end={vec(R, R)} colors={[c1, c2]} />
+      </Circle>
+      {/* glossy sheen */}
       <Circle cx={0} cy={0} r={R}>
         <RadialGradient
-          c={vec(-R * 0.35, -R * 0.4)}
-          r={R}
-          positions={[0, 0.5, 1]}
-          colors={['#ffffff', skin.core, mixHex(skin.core, skin.glow, 0.6)]}
+          c={vec(-R * 0.34, -R * 0.4)}
+          r={R * 1.25}
+          positions={[0, 0.55]}
+          colors={['rgba(255,255,255,0.8)', 'rgba(255,255,255,0)']}
         />
       </Circle>
       {/* rim */}
