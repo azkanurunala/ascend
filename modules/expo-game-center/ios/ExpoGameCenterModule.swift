@@ -18,6 +18,13 @@ public class ExpoGameCenterModule: Module {
   // handler resolves and clears them. All access is on the main thread.
   private var pendingAuth: [Promise] = []
   private var authHandlerInstalled = false
+  // GameKit invokes authenticateHandler again only when the auth STATE changes,
+  // not when we'd merely like to retry. So once it has settled at least once we
+  // must NOT park new promises (they would hang forever) — we resolve them with
+  // the current state instead. `signInInProgress` covers the window where a
+  // sign-in VC is on screen and a real callback is still coming.
+  private var authSettledOnce = false
+  private var signInInProgress = false
 
   private func installAuthHandlerIfNeeded() {
     if authHandlerInstalled { return }
@@ -25,9 +32,12 @@ public class ExpoGameCenterModule: Module {
     GKLocalPlayer.local.authenticateHandler = { [weak self] viewController, _ in
       guard let self = self else { return }
       if let viewController = viewController {
+        self.signInInProgress = true
         self.topViewController()?.present(viewController, animated: true, completion: nil)
         return // wait for the next callback after the user signs in / cancels
       }
+      self.signInInProgress = false
+      self.authSettledOnce = true
       let authed = GKLocalPlayer.local.isAuthenticated
       let waiting = self.pendingAuth
       self.pendingAuth.removeAll()
@@ -44,6 +54,13 @@ public class ExpoGameCenterModule: Module {
       DispatchQueue.main.async {
         if GKLocalPlayer.local.isAuthenticated {
           promise.resolve(true)
+          return
+        }
+        // Already settled once and no sign-in flow on screen → the handler will
+        // not fire again on its own, so don't park (that would hang). Report the
+        // current (failed) state and let the caller surface it.
+        if self.authSettledOnce && !self.signInInProgress {
+          promise.resolve(false)
           return
         }
         self.pendingAuth.append(promise)
