@@ -605,6 +605,14 @@ useEffect(() => {
 ```
 
 ### Pola D — Fisika constants-driven + kurva kesulitan
+
+> ⚠️ **Snippet di bawah ini adalah mekanik LAMA Ascend (tap-to-flap ala Flappy Bird).**
+> Mekanik itu kena reject App Store **4.3(a) (spam — terlalu mirip Flappy Bird)** dan sudah
+> diganti total menjadi **orbit slingshot** (tahan = orbit + charge, lepas = lempar tangen,
+> sambung antar gravity well untuk naik). Lihat `src/game/GameStage.js` untuk engine yang
+> sekarang dipakai (`ORB_GRAV`, `SPIN_ACCEL`, `CAPTURE_R`, `ANCHOR`, `ALT_SCALE`…). Snippet
+> ini dipertahankan hanya sebagai contoh pola "fisika constants-driven", bukan mekanik final.
+
 ```js
 const BALL_R = 15, GRAVITY = 2000, FLAP = 560;
 const DIFF = {
@@ -1048,12 +1056,13 @@ Deklarasikan hanya:
 
 Sesuaikan dengan game-mu; ini contoh dari Pivot (perhatikan batas karakter).
 
-- **App Name** (≤30): `Pivot: One-Tap Climb`
-- **Subtitle** (≤30): `Tap to rise. Dodge to survive.`
-- **Promotional Text** (≤170, bisa diedit tanpa review): *One tap. One orb. Climb from
-  the meadow to orbit and chase a new high score. No wifi, no clutter — just pure reflex.*
+- **App Name** (≤30): `Ascend: Orbit Climb`
+- **Subtitle** (≤30): `Orbit & slingshot the sky`
+- **Promotional Text** (≤170, bisa diedit tanpa review): *One orb. A sky full of gravity
+  wells. Hold to orbit, release to slingshot, and chain your way from the meadow to orbit.*
 - **Keywords** (≤100, dipisah koma tanpa spasi):
-  `one tap,arcade,offline,climb,endless,reflex,orb,dodge,high score,minimal,casual,skill,relax,flappy`
+  `orbit,slingshot,arcade,offline,climb,endless,gravity,orb,space,high score,minimal,casual,skill,flow`
+  > Jangan pakai keyword `flappy`/`dodge` — itu menggambarkan loop lama dan ikut memicu reject 4.3(a).
 - **Description** (≤4000): paragraf pembuka mekanik → "RISE THROUGH EIGHT WORLDS" →
   "ONE TAP. INFINITE SKILL." → "PLAY ANYWHERE (offline)" → "MAKE THE ORB YOURS (skins)"
   → "CHASE THE LEADERBOARD" → "BUILT FOR FEEL (glassmorphism + haptics)".
@@ -1185,5 +1194,6 @@ benar-benar **tinggal `eas build` → `eas submit` → Submit for Review**.
 > warna & angka. **Layanan eksternal** (storage/IAP/leaderboard) dibungkus modul yang
 > degrade jadi no-op. Semuanya **offline-first, tanpa login**.
 
-Salin pola-pola di atas, ganti mekanik "tap untuk terbang & hindari pillar" dengan
-mekanik game-mu sendiri, dan seluruh kerangka di sekitarnya bisa dipakai ulang apa adanya.
+Salin pola-pola di atas, ganti mekanik inti dengan mekanik game-mu sendiri, dan seluruh
+kerangka di sekitarnya bisa dipakai ulang apa adanya. (Mekanik Ascend sendiri sekarang
+adalah **orbit slingshot** — bukan lagi tap-to-flap; lihat `src/game/GameStage.js`.)

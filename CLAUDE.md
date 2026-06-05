@@ -4,11 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-**Ascend** — a fully offline, one-tap glassmorphism arcade game in **React Native (Expo SDK 56)**.
-Tap to flap a luminous orb upward against gravity, thread it through frosted-glass pillars, and
-climb through eight altitude bands (meadow → orbit). The live game canvas is rendered with
-**React Native Skia**; menus/HUD/overlays are native RN views using **expo-blur** for real frosted glass.
-It's a faithful re-implementation of a design prototype (see `design_extract/`).
+**Ascend** — a fully offline, one-touch glassmorphism arcade game in **React Native (Expo SDK 56)**.
+The core loop is an **orbit slingshot**: HOLD to latch a luminous orb into orbit around a glowing
+gravity well (it charges/spins up while held), RELEASE to fling it off on the tangent toward the
+next well. Chain wells to climb through eight altitude bands (meadow → orbit); fall off-screen and
+the run ends. The live game canvas is rendered with **React Native Skia**; menus/HUD/overlays are
+native RN views using **expo-blur** for real frosted glass.
+
+> History: this was originally a Flappy-Bird-style "tap to flap through pillars" game. It was
+> rejected on App Store guideline **4.3(a) (spam — too similar to Flappy Bird)** and the core
+> mechanic was overhauled to orbit-slingshot (2026-06). The glass aesthetic, orb, skins, bands and
+> the `App.js` contract were kept; only the gameplay loop changed.
 
 ## Commands
 
@@ -47,8 +53,13 @@ There is **no test suite, linter, or typecheck** configured — verification is 
 ref (`g`), NOT React state — React re-renders only to repaint. The loop is one `requestAnimationFrame`
 loop mounted once; props that can change mid-run (`skin`, `paused`, `difficulty`, callbacks…) are
 **mirrored into refs** every render so the long-lived loop reads current values without restarting.
-Physics is constants-driven (`GRAVITY`, `FLAP`, `BALL_R`) scaled by the `DIFF` table; difficulty
-curve (speed up / gap tighten with score) matches the PRD formulas documented in `README.md`.
+Physics is constants-driven (top of the file): `ORB_GRAV` (downward pull you slingshot against),
+`SPIN_ACCEL` (how fast a held orbit charges — this is launch power), `SPEED_MIN/MAX`, `CAPTURE_R`
+(grab range to a well), `ORBIT_MIN/MAX` (orbit radius), `ANCHOR` (orb's screen height), `ALT_SCALE`
+(climb-px per score point), `WELL_BONUS`. The `DIFF` table scales `grav`/`spacing`/`drift` per
+difficulty. World `+y` is UP; a peak-following camera maps world→screen. `src/debug.js` has
+**temporary** `AUTO_DEMO`/`DEMO_SCORE` flags that auto-start and auto-play a run (no taps) for
+capturing real gameplay screenshots — must be `false` for shipping (also `__DEV__`-gated in `App.js`).
 
 **`src/theme.js` — the single source of visual + game truth.** Glass palette (`ASC`), the eight
 **altitude bands** (`ASC_BANDS`) with `skyAt(altitude)` interpolating sky colors continuously as you

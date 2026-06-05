@@ -28,12 +28,14 @@ import {
 } from './iap';
 import { authenticateGameCenter, submitScore as submitLeaderboard } from './leaderboard';
 import { isValidGiftCode } from './giftcodes';
+import { AUTO_DEMO, DEMO_SCORE, DEMO_SCREEN } from './debug';
 import GameStage from './game/GameStage';
 import HomeScreen from './screens/HomeScreen';
 import LeaderboardScreen from './screens/LeaderboardScreen';
 import CosmeticsScreen from './screens/CosmeticsScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import GameOverOverlay from './screens/GameOverOverlay';
+import Onboarding from './screens/Onboarding';
 import PaywallModal from './screens/PaywallModal';
 import BottomNav from './components/BottomNav';
 import { IconClose } from './components/Icons';
@@ -62,6 +64,8 @@ function Game() {
   const [reviveAt, setReviveAt] = useState(0);
   const [over, setOver] = useState(null); // { score, isBest, band }
   const [statusDark, setStatusDark] = useState(false);
+  const [onboarded, setOnboarded] = useState(false); // seen the how-to-play tutorial
+  const [tutorial, setTutorial] = useState(null); // null | 'onboard' | 'manual'
 
   const [best, setBest] = useState(0);
   const [games, setGames] = useState(0);
@@ -92,6 +96,7 @@ function Game() {
         ['settings', DEFAULT_SETTINGS],
         ['tweaks', DEFAULT_TWEAKS],
         ['giftPro', false],
+        ['onboarded', false],
       ]);
       if (!alive) return;
       setBest(s.best);
@@ -102,6 +107,7 @@ function Game() {
       setRevive(s.revive);
       setSettings({ ...DEFAULT_SETTINGS, ...s.settings });
       setTweaks({ ...DEFAULT_TWEAKS, ...s.tweaks });
+      setOnboarded(!!s.onboarded);
       setLoaded(true);
     })();
     return () => {
@@ -117,6 +123,7 @@ function Game() {
   useEffect(() => { if (loaded) LS.set('revive', revive); }, [revive, loaded]);
   useEffect(() => { if (loaded) LS.set('settings', settings); }, [settings, loaded]);
   useEffect(() => { if (loaded) LS.set('tweaks', tweaks); }, [tweaks, loaded]);
+  useEffect(() => { if (loaded) LS.set('onboarded', onboarded); }, [onboarded, loaded]);
 
   // ---- monetization init (once) ----
   // Start Game Center, configure RevenueCat with a customer-info listener (the
@@ -153,15 +160,58 @@ function Game() {
   const menuAnimate = tweaks.menuMotion && !settings.reduceMotion;
 
   // ---- game flow ----
-  const startGame = useCallback(() => {
+  const beginRun = useCallback(() => {
     setOver(null);
     setStatusDark(false);
     setRunKey((k) => k + 1);
     setMode('playing');
   }, []);
 
+  // First-ever Play shows the how-to-play tutorial; after that it starts directly.
+  const startGame = useCallback(() => {
+    if (!onboarded) {
+      setTutorial('onboard');
+      return;
+    }
+    beginRun();
+  }, [onboarded, beginRun]);
+
+  // Tutorial finished/skipped: remember it, and if it gated the first run, start it.
+  const finishTutorial = useCallback(() => {
+    const gatedRun = tutorial === 'onboard';
+    setOnboarded(true);
+    setTutorial(null);
+    if (gatedRun) beginRun();
+  }, [tutorial, beginRun]);
+
+  const openTutorial = useCallback(() => setTutorial('manual'), []);
+
+  // Debug capture mode: skip the menu/tutorial and auto-start a run on launch.
+  useEffect(() => {
+    if (__DEV__ && AUTO_DEMO && loaded && mode === 'menu') {
+      setTutorial(null);
+      beginRun();
+    }
+  }, [loaded, mode, beginRun]);
+
+  // Debug capture: force a specific screen on launch (for screenshots).
+  useEffect(() => {
+    if (!__DEV__ || !loaded || !DEMO_SCREEN) return;
+    if (DEMO_SCREEN === 'tutorial') setTutorial('manual');
+    else if (['play', 'ranks', 'skins', 'settings'].includes(DEMO_SCREEN)) {
+      setMode('menu');
+      setTab(DEMO_SCREEN);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded]);
+
   const handleGameOver = useCallback(
     (score, secs) => {
+      // Debug capture mode: silently restart so no overlay covers the gameplay.
+      if (__DEV__ && AUTO_DEMO) {
+        setRunKey((k) => k + 1);
+        return;
+      }
       setGames((g) => g + 1);
       setPlaytime((p) => p + (secs || 0));
       setBest((b) => Math.max(b, score));
@@ -305,13 +355,15 @@ function Game() {
           reduceMotion={settings.reduceMotion}
           highQuality={settings.highQuality}
           difficulty={tweaks.difficulty}
+          autoPlay={__DEV__ && AUTO_DEMO}
+          demoScore={DEMO_SCORE}
           onGameOver={handleGameOver}
           onBand={onBand}
           width={width}
           height={height}
           topInset={topInset}
         />
-        {!over && (
+        {!over && !(__DEV__ && AUTO_DEMO) && (
           <Pressable
             onPress={goHome}
             style={[
@@ -352,6 +404,7 @@ function Game() {
         reviveReady={reviveReady}
         animate={menuAnimate}
         onPlay={startGame}
+        onHowTo={openTutorial}
         width={width}
         height={height}
         topInset={topInset}
@@ -414,16 +467,12 @@ function Game() {
       <StatusBar style={dark ? 'light' : 'dark'} />
       {screen}
       {mode !== 'playing' && <BottomNav tab={tab} setTab={setTab} bottomInset={bottomInset} />}
-      {/* DEV-only: open the paywall on demand for testing/screenshots. __DEV__
-          is false in production builds, so this never ships. */}
-      {__DEV__ && mode !== 'playing' && !paywall && (
-        <Pressable
-          onPress={() => setPaywall({ intent: 'skin' })}
-          style={[styles.devPaywall, { bottom: bottomInset + 92 }]}
-        >
-          <Text style={styles.devPaywallText}>PAYWALL</Text>
-        </Pressable>
-      )}
+      <Onboarding
+        visible={!!tutorial}
+        onDone={finishTutorial}
+        skin={skin}
+        animate={menuAnimate}
+      />
       {paywall && (
         <PaywallModal
           onClose={() => setPaywall(null)}
@@ -463,18 +512,6 @@ export default function App() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  devPaywall: {
-    position: 'absolute',
-    left: 16,
-    zIndex: 70,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-    backgroundColor: 'rgba(90,169,242,0.9)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.6)',
-  },
-  devPaywallText: { fontFamily: FONT.monoSemi, fontSize: 11, letterSpacing: 1, color: '#fff' },
   exit: {
     position: 'absolute',
     right: 18,

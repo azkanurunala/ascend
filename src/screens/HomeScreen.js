@@ -7,7 +7,7 @@ import MenuScreen from '../components/MenuScreen';
 import Glass from '../components/Glass';
 import Orb from '../components/Orb';
 import Float from '../components/Float';
-import { PrimaryButton } from '../components/Buttons';
+import { PrimaryButton, TextButton } from '../components/Buttons';
 import { IconArrowUp, IconBest } from '../components/Icons';
 import { ASC, FONT } from '../theme';
 import { fmtNum, fmtTime } from '../utils/format';
@@ -32,6 +32,7 @@ export default function HomeScreen({
   reviveReady,
   animate,
   onPlay,
+  onHowTo,
   width,
   height,
   topInset,
@@ -45,9 +46,9 @@ export default function HomeScreen({
     >
       {/* wordmark */}
       <View style={{ alignItems: 'center' }}>
-        <Text style={styles.eyebrow}>OFFLINE · ONE TAP</Text>
+        <Text style={styles.eyebrow}>OFFLINE · ONE TOUCH</Text>
         <Text style={styles.wordmark}>Ascend</Text>
-        <Text style={styles.tagline}>Tap to rise. Dodge to survive.</Text>
+        <Text style={styles.tagline}>Orbit the wells. Slingshot to the stars.</Text>
       </View>
 
       {/* hero orb */}
@@ -79,6 +80,7 @@ export default function HomeScreen({
 
       {/* play */}
       <PrimaryButton label="Play" icon={<IconArrowUp size={20} color="#08233C" />} onPress={onPlay} />
+      {onHowTo && <TextButton label="How to play" onPress={onHowTo} style={{ marginTop: 8 }} />}
     </MenuScreen>
   );
 }

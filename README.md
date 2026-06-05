@@ -1,30 +1,38 @@
 # Ascend
 
-> **Tap to rise. Dodge to survive. How high can you go?**
+> **Orbit the wells. Slingshot to the stars. How high can you climb?**
 
-A fully-playable, offline-first **glassmorphism** hypercasual game built in **React Native (Expo)**.
-You tap to flap a luminous glass orb upward against gravity and thread it through drifting
-frosted-glass pillars while the sky evolves through eight altitude bands — from a green meadow,
-up through the stratosphere, into aurora and finally orbit, where stars fade in.
+A fully-playable, offline-first **glassmorphism** arcade game built in **React Native (Expo)**.
+Its core loop is an **orbital slingshot**: hold to latch a luminous glass orb into orbit around a
+glowing gravity well (it charges as you hold), then release to fling it off on the tangent toward
+the next well. Chain wells to climb through eight altitude bands — from a green meadow, up through
+the stratosphere, into aurora and finally orbit, where stars fade in.
 
-This is a faithful, pixel-considered re-implementation of the `Ascend.html` design prototype
-(from Claude Design). The live game canvas is rendered with **React Native Skia**; the menus,
-HUD and overlays are native React Native views using **expo-blur** for real frosted glass.
+The live game canvas is rendered with **React Native Skia**; the menus, HUD and overlays are
+native React Native views using **expo-blur** for real frosted glass.
+
+> **Note:** Ascend began as a Flappy-Bird-style tap-to-flap game; after an App Store 4.3(a)
+> spam rejection (too similar to Flappy Bird) the core mechanic was rebuilt as the orbit
+> slingshot described here. The glass aesthetic, orb, skins and altitude bands were kept.
 
 ---
 
 ## Gameplay
 
-- **One-tap mechanic** (PRD §3): each tap applies an upward impulse; gravity constantly pulls
-  the orb down. Net motion is up while you keep tapping.
-- **Procedural frosted-glass pillars** with random gaps scroll toward you.
-- **Collision** ends the run; floor/ceiling are lethal too.
-- **Score** ticks up with distance and jumps **+50** each time you clear a pillar.
-- **Difficulty scaling** (PRD §3.2 formulas): speed rises and the gap tightens as the score
-  grows — `speed = min(360, 156 + score·0.02)`, `gap = max(146, 248 − score·0.0135)`,
-  scaled by the chosen difficulty (chill / normal / intense).
-- **Revive system** (PRD §15): **1 free revive/day**, plus **1 optional "watch ad" revive**
-  (capped at 2/day). Resets at local midnight.
+- **Hold to charge:** pressing latches the orb into orbit around the nearest gravity well and
+  spins it up — the longer you hold, the more launch power (and the brighter the orbit ring).
+- **Release to slingshot:** the orb flies off along its current travel direction (the tangent),
+  arcing under a gentle pull. A live gold **aim arrow** shows where it'll go before you let go.
+- **Chain & climb:** as the orb nears the next well, hold again to latch on. Hold–release–hold,
+  zig-zagging upward through the bands.
+- **Fall = game over:** miss every well and the orb drops off the bottom of the screen.
+- **Score = altitude** climbed, plus a **+20 combo** bonus for each fresh well you grab.
+- **Difficulty scaling:** `ORB_GRAV` (pull), well `spacing`, and horizontal well `drift` scale
+  with the chosen difficulty (chill / normal / intense); wells start drifting at higher altitude.
+- **Revive system:** **1 free revive/day** (Ascend Pro = unlimited). Resets at local midnight.
+
+A first-run **how-to-play onboarding** walks through the mechanic (re-openable from the home
+screen), and an in-game aim arrow keeps the slingshot direction readable.
 
 ## Screens (all in the glass language)
 
@@ -40,14 +48,14 @@ A floating **Tweaks** panel (Difficulty + Menu motion) mirrors the prototype's l
 
 ## Features vs. PRD (MVP §7) — all satisfied
 
-**Core:** one-tap gravity ✓ · procedural obstacles (spacing decreases over time) ✓ · collision ✓ ·
-score per obstacle ✓ · difficulty scaling (speed + spacing) ✓ · game over + restart ✓ ·
+**Core:** one-touch orbit slingshot ✓ · procedural gravity wells (spacing/drift scale with score) ✓ ·
+fall-to-fail ✓ · score per altitude + well combo ✓ · difficulty scaling ✓ · game over + restart ✓ ·
 leaderboard (local, top 50) ✓ · personal best ✓
 **Monetization:** cosmetic skins (6) ✓ · trail effects (per-skin trail color) ✓ ·
-optional ad revive (1 free + 1 ad/day) ✓ · no energy system ✓
+revives (1 free/day, Ascend Pro = unlimited) ✓ · no energy system ✓
 **Offline:** all logic local ✓ · leaderboard cached locally ✓ · zero login ✓ · no permissions ✓
-**Juice:** evolving 8-band sky, drifting glass clouds, twinkling stars, particle trail, flap
-sparks, +score pops, screen shake & haptics on death, revive flash.
+**Juice:** evolving 8-band sky, drifting glass clouds, twinkling stars, particle trail, charge
+ring + aim arrow, release sparks, +score pops, screen shake & haptics on death, revive flash.
 
 ## Project structure
 
@@ -58,7 +66,7 @@ src/
   theme.js                      # palette, 8 altitude bands (skyAt), 6 skins, fonts
   storage.js                    # AsyncStorage helpers (offline-first) + daily key
   utils/{color,format}.js       # hex mixing, number/time/price formatting
-  game/GameStage.js             # Skia engine: physics, pillars, collision, juice, HUD
+  game/GameStage.js             # Skia engine: orbit/slingshot physics, wells, camera, juice, HUD
   components/
     Glass.js  Orb.js  SkyBackground.js  BottomNav.js  TweaksPanel.js
     Buttons.js  Controls.js  Icons.js  Float.js  MenuScreen.js
@@ -90,8 +98,9 @@ launches the app. Press `r` in the Metro terminal to reload.
 
 ### How to play
 
-Tap **Play**, then tap **anywhere** to flap upward. Keep tapping to stay aloft and thread the
-orb through each gap. Don't hit a pillar, the ceiling, or the floor.
+Tap **Play**, then **hold anywhere** to orbit the nearest gravity well — the longer you hold, the
+more it charges. **Release** to slingshot the orb toward the next well (the gold arrow shows the
+direction). Hold again as you near it to latch on, and chain wells to climb. Don't fall off-screen.
 
 ## Tuning
 

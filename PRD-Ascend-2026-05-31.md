@@ -1,7 +1,15 @@
 # PRD: Ascend
 
+> ⚠️ **HISTORICAL PRD (2026-05-31).** This describes the ORIGINAL tap-to-flap / dodge-pillars
+> concept, which was rejected on App Store guideline **4.3(a) (spam — too similar to Flappy
+> Bird)**. The shipping game pivoted to an **orbit-slingshot** mechanic (hold to orbit + charge a
+> gravity well, release to slingshot toward the next, chain to climb; fall off-screen = game
+> over). Treat the "Core Mechanic / obstacles / dodge" sections below as superseded — see
+> `README.md` and `CLAUDE.md` for the current design. Sky bands, skins, offline-first structure
+> and monetization still apply.
+
 **Product Name:** Ascend  
-**Subtitle:** Tap to rise. Dodge to survive. How high can you go?  
+**Subtitle:** Orbit the wells. Slingshot to the stars. How high can you climb?  
 **Version:** 1.0 MVP  
 **Target Release:** Week 4 (hypercasual, simple scope)  
 **Platform:** iOS 15+, offline-first  

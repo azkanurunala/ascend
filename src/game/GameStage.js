@@ -1,7 +1,9 @@
 // ============ ASCEND GAME ENGINE + RENDERER ============
-// One-tap rise-against-gravity; dodge frosted-glass pillars (PRD §3 core mechanic).
+// ORBIT SLINGSHOT: the orb coasts under a gentle pull. HOLD to latch it into
+// orbit around the nearest gravity well; RELEASE to slingshot it off on the
+// tangent toward the next well. Chain wells to climb the eight altitude bands.
+// Miss every well and the orb falls off-screen — that's game over.
 // All mutable state lives in a ref; React re-renders only to repaint Skia + HUD.
-// Ported from the design bundle (assets/ascend-game.jsx, canvas → Skia).
 
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
@@ -10,9 +12,9 @@ import {
   Canvas,
   Group,
   Rect,
-  RoundedRect,
   Circle,
   Oval,
+  Line,
   LinearGradient,
   RadialGradient,
   BlurMask,
@@ -21,22 +23,29 @@ import {
 
 import { ASC, FONT, skyAt } from '../theme';
 import { rgba } from '../utils/color';
-import { IconArrowUp } from '../components/Icons';
 
-const BALL_R = 15;
-const GRAVITY = 1500; // pull while descending — keeps the fall weighty
-const GRAVITY_UP = 1250; // lighter pull while rising so the ascent floats, not fights
-const FLAP = 480;
-const MAX_FALL = 820; // terminal velocity so the descent stays controlled, not runaway
+const BALL_R = 14;
+const ORB_GRAV = 480; // downward world pull (px/s²) — what you slingshot against
+const CAPTURE_R = 142; // how close to a well's center a grab will latch
+const ORBIT_MIN = 44; // clamp the orbit radius so latches feel consistent
+const ORBIT_MAX = 116;
+const SPEED_MIN = 300; // orbital/flight speed floor so the orb never crawls
+const SPEED_MAX = 820; // …and ceiling so a charged fling can't go ballistic
+const SPIN_ACCEL = 600; // holding spins the orbit up (px/s² of tangential speed) — this IS your launch power
+const RELEASE_BOOST = 1.04; // small extra slingshot kick on release
+const ANCHOR = 0.6; // the orb rides ~60% down the screen; upcoming wells sit above
+const ALT_SCALE = 5; // world-px of climb per score point
+const WELL_BONUS = 20; // score for each fresh well grabbed (combo)
+
+// difficulty knobs: stronger pull, wider spacing and more well drift = harder
 const DIFF = {
-  chill: { sp: 0.82, gap: 1.12 },
-  normal: { sp: 1, gap: 1 },
-  intense: { sp: 1.22, gap: 0.84 },
+  chill: { grav: 0.84, spacing: 0.88, drift: 0.5 },
+  normal: { grav: 1, spacing: 1, drift: 1 },
+  intense: { grav: 1.18, spacing: 1.16, drift: 1.6 },
 };
 
-// Pillar tints — pipes cycle through these so they're colorful, not all clear
-// glass. Each is rendered as colored frosted glass with a glowing edge.
-const PIPE_TINTS = [
+// Well tints — each gravity well is luminous frosted glass in one of these hues.
+const WELL_TINTS = [
   '#5AA9F2', '#A98CF5', '#4FE0B0', '#F2719B',
   '#F2B33D', '#7CFFE0', '#FF8A5C', '#9CC9FF',
 ];
@@ -45,6 +54,9 @@ function fmt(n) {
   return Math.floor(n)
     .toString()
     .replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+function clamp(v, lo, hi) {
+  return v < lo ? lo : v > hi ? hi : v;
 }
 
 export default function GameStage({
@@ -55,6 +67,8 @@ export default function GameStage({
   reduceMotion,
   highQuality = true,
   difficulty = 'normal',
+  autoPlay = false, // debug: the orb plays itself (see src/debug.js)
+  demoScore = 0, // debug: start the run near this score (drives the sky band)
   onGameOver,
   onBand,
   width,
@@ -78,6 +92,8 @@ export default function GameStage({
   const rmRef = useRef(reduceMotion);
   const hqRef = useRef(highQuality);
   const difRef = useRef(difficulty);
+  const autoRef = useRef(autoPlay);
+  const demoScoreRef = useRef(demoScore);
   const onGameOverRef = useRef(onGameOver);
   const onBandRef = useRef(onBand);
   skinRef.current = skin;
@@ -85,6 +101,8 @@ export default function GameStage({
   rmRef.current = reduceMotion;
   hqRef.current = highQuality;
   difRef.current = difficulty;
+  autoRef.current = autoPlay;
+  demoScoreRef.current = demoScore;
   onGameOverRef.current = onGameOver;
   onBandRef.current = onBand;
 
@@ -119,25 +137,38 @@ export default function GameStage({
     return arr;
   }
   function freshWorld() {
-    return {
+    // debug: start the run already high so we can capture any sky band
+    const baseY = autoRef.current && demoScoreRef.current > 0 ? demoScoreRef.current * ALT_SCALE : 0;
+    const baseScore = Math.floor(baseY / ALT_SCALE);
+    const w = {
       W,
       H,
-      ballX: W * 0.32,
-      ballY: H * 0.42,
-      vel: 0,
-      rot: 0,
-      obstacles: [],
-      pipeCount: 0,
-      spawnX: W + 60,
-      scoreF: 0,
-      score: 0,
-      dist: 0,
+      // orb lives in world space; +y is UP (it climbs as y grows)
+      orb: { x: W * 0.5, y: baseY, vx: 0, vy: 0 },
+      orbScreen: { x: W * 0.5, y: H * ANCHOR },
+      wells: [],
+      wellCount: 0,
+      holding: false, // finger currently down → orbiting
+      orbitWell: null, // well object the orb is latched to
+      orbitR: 70,
+      orbitAng: 0,
+      orbitDir: 1,
+      orbitOmega: 1.1,
+      orbitSpeed: SPEED_MIN, // tangential speed; charges up while holding
+      autoTarget: null, // debug autopilot: the well it's currently aiming for
+      camY: baseY, // world-y mapped to the anchor line
+      camTarget: baseY,
+      altPeak: baseY,
+      bonus: 0,
+      scoreF: baseScore,
+      score: baseScore,
       trail: [],
       sparks: [],
+      pops: [],
       clouds: seedClouds(),
       stars: seedStars(),
-      pops: [],
       shake: 0,
+      whiff: 0, // brief feedback when a grab finds no well
       band: 'Meadow',
       started: false,
       dead: false,
@@ -146,26 +177,45 @@ export default function GameStage({
       elapsed: 0,
       flashRevive: 0,
     };
+    // seed the first well right under the orb so the ready-screen demo orbits it
+    w.wells.push(makeWell(w, W * 0.5, baseY));
+    // pre-spawn a ladder of wells above so the climb is visible from frame one
+    while (w.wells[w.wells.length - 1].y < baseY + H * 1.4) spawnWell(w);
+    return w;
   }
 
-  // ---- difficulty (PRD formulas, tuned to px) ------------------------------
-  function diff(score) {
+  function makeWell(w, x, y) {
     const D = DIFF[difRef.current] || DIFF.normal;
-    return {
-      speed: Math.min(360 * D.sp, (156 + score * 0.02) * D.sp),
-      gapH: Math.max(146 * D.gap, (248 - score * 0.0135) * D.gap),
-      spacingX: Math.max(196, 320 - score * 0.012),
+    const driftAmp = w.score > 1400 ? (18 + Math.random() * 42) * D.drift : 0;
+    const well = {
+      baseX: x,
+      x,
+      y,
+      r: 30 + Math.random() * 8,
+      tint: WELL_TINTS[w.wellCount % WELL_TINTS.length],
+      driftAmp,
+      driftSp: 0.5 + Math.random() * 0.7,
+      driftPh: Math.random() * Math.PI * 2,
+      scored: false,
     };
+    w.wellCount += 1;
+    return well;
   }
-  function spawnObstacle(w) {
-    const d = diff(w.score);
-    const margin = 64;
-    const gapH = d.gapH;
-    const gapY = margin + gapH / 2 + Math.random() * (w.H - 2 * margin - gapH - 70);
-    const tint = PIPE_TINTS[w.pipeCount % PIPE_TINTS.length];
-    w.pipeCount += 1;
-    w.obstacles.push({ x: w.spawnX, gapY, gapH, w: 62, passed: false, tint });
-    w.spawnX += d.spacingX;
+  function spawnWell(w) {
+    const D = DIFF[difRef.current] || DIFF.normal;
+    const last = w.wells[w.wells.length - 1];
+    const dy = (148 + Math.random() * 78) * D.spacing;
+    const ny = (last ? last.y : 0) + dy;
+    const margin = 68;
+    let nx = W * 0.5;
+    if (last) {
+      const minGap = W * 0.26;
+      for (let i = 0; i < 8; i++) {
+        nx = margin + Math.random() * (W - 2 * margin);
+        if (Math.abs(nx - last.baseX) >= minGap) break;
+      }
+    }
+    w.wells.push(makeWell(w, nx, ny));
   }
 
   // ---- lifecycle: build world on runKey ------------------------------------
@@ -181,40 +231,146 @@ export default function GameStage({
     const w = g.current;
     if (!w) return;
     w.dead = false;
-    w.vel = -FLAP * 0.4;
-    w.ballY = w.H * 0.42;
-    w.obstacles = w.obstacles.filter((o) => o.x > w.ballX + 220 || o.x < w.ballX - 80);
+    // drop the orb back onto the nearest well above the camera and re-latch it
+    const safe =
+      w.wells.find((wl) => wl.y > w.camTarget) || w.wells[w.wells.length - 1];
+    if (safe) {
+      w.orb.x = safe.x;
+      w.orb.y = safe.y - 70;
+      w.orb.vx = 0;
+      w.orb.vy = 0;
+      latchTo(w, safe);
+    }
     w.flashRevive = 1;
     setPhaseBoth('run');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reviveAt]);
 
-  // ---- input ---------------------------------------------------------------
-  const tap = () => {
+  // ---- input: hold to orbit, release to slingshot --------------------------
+  function nearestWell(w) {
+    let best = null;
+    let bestD = CAPTURE_R;
+    for (const wl of w.wells) {
+      const d = Math.hypot(w.orb.x - wl.x, w.orb.y - wl.y);
+      if (d < bestD) {
+        bestD = d;
+        best = wl;
+      }
+    }
+    return best;
+  }
+  function latchTo(w, well) {
+    const dx = w.orb.x - well.x;
+    const dy = w.orb.y - well.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const r = clamp(dist, ORBIT_MIN, ORBIT_MAX);
+    const ang = Math.atan2(dy, dx);
+    const speed = clamp(Math.hypot(w.orb.vx, w.orb.vy), SPEED_MIN, SPEED_MAX);
+    // keep spinning the way the orb was already travelling around the well
+    const ccw = (-dy * w.orb.vx + dx * w.orb.vy) / dist;
+    const dir = ccw >= 0 ? 1 : -1;
+    w.holding = true;
+    w.orbitWell = well;
+    w.orbitR = r;
+    w.orbitAng = ang;
+    w.orbitDir = dir;
+    w.orbitSpeed = speed; // carry in the flight speed; it charges up from here
+    w.orbitOmega = (speed / r) * dir;
+    if (!well.scored) {
+      well.scored = true;
+      w.bonus += WELL_BONUS;
+      w.pops.push({ x: w.orbScreen.x + 16, y: w.orbScreen.y - 26, life: 1, val: WELL_BONUS });
+    }
+  }
+  const grab = () => {
     const w = g.current;
-    if (!w || pausedRef.current) return;
-    if (phaseRef.current === 'dead') return;
+    if (!w || pausedRef.current || phaseRef.current === 'dead') return;
     if (!w.started) {
       w.started = true;
       setPhaseBoth('run');
-      spawnObstacle(w);
     }
-    w.vel = -FLAP;
-    for (let i = 0; i < (hqRef.current ? 5 : 2); i++)
+    const well = nearestWell(w);
+    if (!well) {
+      w.whiff = 1; // missed — no well in reach
+      return;
+    }
+    latchTo(w, well);
+    if (!rmRef.current) {
+      try {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      } catch (e) {}
+    }
+  };
+  const release = () => {
+    const w = g.current;
+    if (!w || !w.holding) return;
+    w.holding = false;
+    w.orbitWell = null;
+    // velocity is already the orbital tangent — add a small slingshot kick
+    w.orb.vx *= RELEASE_BOOST;
+    w.orb.vy *= RELEASE_BOOST;
+    for (let i = 0; i < (hqRef.current ? 6 : 3); i++)
       w.sparks.push({
-        x: w.ballX - 6,
-        y: w.ballY + 10,
-        vx: -40 - Math.random() * 60,
-        vy: (Math.random() - 0.5) * 80,
+        x: w.orbScreen.x,
+        y: w.orbScreen.y,
+        vx: -w.orb.vx * 0.15 + (Math.random() - 0.5) * 60,
+        vy: w.orb.vy * 0.15 + (Math.random() - 0.5) * 60,
         life: 1,
         r: 1.5 + Math.random() * 2.2,
       });
   };
 
+  // ---- debug autopilot: plays the game on its own for screenshot capture ---
+  function pickTargetAbove(w, fromWell) {
+    const fromY = fromWell ? fromWell.y : w.orb.y;
+    let best = null;
+    for (const wl of w.wells) {
+      if (wl === fromWell) continue;
+      if (wl.y > fromY + 12 && (!best || wl.y < best.y)) best = wl;
+    }
+    return best;
+  }
+  function autopilot(w) {
+    if (w.holding && w.orbitWell) {
+      if (!w.autoTarget || w.autoTarget.y <= w.orbitWell.y) w.autoTarget = pickTargetAbove(w, w.orbitWell);
+      const t = w.autoTarget;
+      if (t) {
+        const tdx = t.x - w.orb.x;
+        const tdy = t.y + 36 - w.orb.y; // aim a touch high to fight the fall
+        const tl = Math.hypot(tdx, tdy) || 1;
+        const vl = Math.hypot(w.orb.vx, w.orb.vy) || 1;
+        const dot = (w.orb.vx * tdx + w.orb.vy * tdy) / (vl * tl);
+        const need = Math.min(SPEED_MAX * 0.92, 480 + tl * 0.9);
+        if (w.orb.vy > 0 && dot > 0.94 && w.orbitSpeed >= need) release();
+        else if (w.orbitSpeed >= SPEED_MAX * 0.99 && w.orb.vy > 0 && dot > 0.78) release();
+      } else if (w.orb.vy > 0 && w.orbitSpeed > 640) {
+        release();
+      }
+    } else {
+      const well = nearestWell(w);
+      if (well) {
+        grab();
+        w.autoTarget = pickTargetAbove(w, well);
+      }
+    }
+  }
+
   // ---- simulation ----------------------------------------------------------
+  function driftWells(w) {
+    for (const wl of w.wells) {
+      if (wl.driftAmp) wl.x = wl.baseX + Math.sin(w.t * wl.driftSp + wl.driftPh) * wl.driftAmp;
+    }
+  }
+
   function idle(w, dt) {
     w.t += dt;
-    w.ballY = w.H * 0.42 + Math.sin(w.t * 2) * 10;
+    driftWells(w);
+    // demo orbit around the first well so the mechanic reads at a glance
+    const well = w.wells[0];
+    w.orbitAng += 1.1 * dt;
+    w.orbitR = 70;
+    w.orb.x = well.x + w.orbitR * Math.cos(w.orbitAng);
+    w.orb.y = well.y + w.orbitR * Math.sin(w.orbitAng);
     w.clouds.forEach((c) => {
       c.x -= c.sp * 18 * dt;
       if (c.x < -c.s) {
@@ -222,25 +378,62 @@ export default function GameStage({
         c.y = Math.random() * w.H * 0.8 + 30;
       }
     });
+    updateCamera(w, dt);
     pushTrail(w);
+  }
+
+  function updateCamera(w, dt) {
+    w.camTarget = Math.max(w.camTarget, w.orb.y);
+    w.camY += (w.camTarget - w.camY) * Math.min(1, dt * 3.5);
+    const anchorY = w.H * ANCHOR;
+    w.orbScreen = { x: w.orb.x, y: anchorY - (w.orb.y - w.camY) };
   }
 
   function step(w, dt) {
     w.t += dt;
     w.elapsed += dt;
-    const d = diff(w.score);
+    const D = DIFF[difRef.current] || DIFF.normal;
 
-    // physics — lighter gravity on the way up (vel < 0) for a floaty, natural
-    // rise; full gravity on the way down so the descent still feels weighty
-    w.vel += (w.vel < 0 ? GRAVITY_UP : GRAVITY) * dt;
-    if (w.vel > MAX_FALL) w.vel = MAX_FALL;
-    w.ballY += w.vel * dt;
-    w.rot = Math.max(-0.5, Math.min(0.9, w.vel / 900));
+    driftWells(w);
 
-    // scroll + score
-    const dx = d.speed * dt;
-    w.dist += dx;
-    w.scoreF += dt * d.speed * 0.42;
+    if (w.holding && w.orbitWell) {
+      // ---- orbiting: spin up (charge), velocity tracks the tangent ----
+      // holding accelerates the orbit — the longer you hold, the harder the fling
+      w.orbitSpeed = Math.min(SPEED_MAX, w.orbitSpeed + SPIN_ACCEL * dt);
+      const c = w.orbitWell;
+      const r = w.orbitR;
+      const om = (w.orbitSpeed / r) * w.orbitDir;
+      w.orbitOmega = om;
+      w.orbitAng += om * dt;
+      w.orb.x = c.x + r * Math.cos(w.orbitAng);
+      w.orb.y = c.y + r * Math.sin(w.orbitAng);
+      w.orb.vx = -r * Math.sin(w.orbitAng) * om;
+      w.orb.vy = r * Math.cos(w.orbitAng) * om;
+    } else {
+      // ---- free flight: gentle downward pull, elastic side walls ----
+      w.orb.vy -= ORB_GRAV * D.grav * dt;
+      const sp = Math.hypot(w.orb.vx, w.orb.vy);
+      if (sp > SPEED_MAX) {
+        const k = SPEED_MAX / sp;
+        w.orb.vx *= k;
+        w.orb.vy *= k;
+      }
+      w.orb.x += w.orb.vx * dt;
+      w.orb.y += w.orb.vy * dt;
+      if (w.orb.x < BALL_R) {
+        w.orb.x = BALL_R;
+        w.orb.vx = Math.abs(w.orb.vx) * 0.92;
+      } else if (w.orb.x > w.W - BALL_R) {
+        w.orb.x = w.W - BALL_R;
+        w.orb.vx = -Math.abs(w.orb.vx) * 0.92;
+      }
+    }
+
+    updateCamera(w, dt);
+
+    // altitude → score (monotonic climb) + well combo bonus
+    w.altPeak = Math.max(w.altPeak, w.orb.y);
+    w.scoreF = w.altPeak / ALT_SCALE + w.bonus;
     w.score = Math.floor(w.scoreF);
 
     // band
@@ -250,33 +443,16 @@ export default function GameStage({
       if (onBandRef.current) onBandRef.current(sky.name);
     }
 
-    // obstacles
-    w.spawnX -= dx;
-    w.obstacles.forEach((o) => {
-      o.x -= dx;
-    });
-    while (w.spawnX < w.W + 40) spawnObstacle(w);
-    w.obstacles = w.obstacles.filter((o) => o.x + o.w > -20);
+    // spawn wells above, cull wells that scrolled well below the screen
+    while (w.wells[w.wells.length - 1].y < w.camTarget + w.H * 1.5) spawnWell(w);
+    const cullY = w.camY - w.H * 1.2;
+    w.wells = w.wells.filter((wl) => wl.y > cullY || wl === w.orbitWell);
 
-    // scoring + collision
-    const bx = w.ballX,
-      by = w.ballY,
-      br = BALL_R;
-    for (const o of w.obstacles) {
-      if (!o.passed && o.x + o.w < bx) {
-        o.passed = true;
-        w.scoreF += 50;
-        w.score = Math.floor(w.scoreF);
-        w.pops.push({ x: bx + 18, y: by - 26, life: 1, val: 50 });
-      }
-      const withinX = bx + br > o.x && bx - br < o.x + o.w;
-      if (withinX) {
-        const top = o.gapY - o.gapH / 2,
-          bot = o.gapY + o.gapH / 2;
-        if (by - br < top || by + br > bot) die(w);
-      }
-    }
-    if (by + br > w.H - 4 || by - br < 2) die(w);
+    // death: orb fell off the bottom of the screen
+    if (w.orbScreen.y > w.H + 46) die(w);
+
+    // rotation for the orb sprite — face its travel direction
+    w.rot = clamp(Math.atan2(w.orb.vy, Math.abs(w.orb.vx) + 1) * -0.4, -0.6, 0.6);
 
     // trail + sparks + pops
     pushTrail(w);
@@ -292,31 +468,36 @@ export default function GameStage({
     });
     w.pops = w.pops.filter((p) => p.life > 0);
 
-    // clouds parallax
+    // clouds parallax (drift down as you climb)
     w.clouds.forEach((c) => {
-      c.x -= c.sp * d.speed * 0.5 * dt;
-      if (c.x < -c.s) {
-        c.x = w.W + c.s;
-        c.y = Math.random() * w.H * 0.8 + 30;
+      c.y += Math.max(0, w.orb.vy) * 0.18 * dt;
+      c.x -= c.sp * 16 * dt;
+      if (c.x < -c.s) c.x = w.W + c.s;
+      if (c.y > w.H + c.s) {
+        c.y = -c.s;
+        c.x = Math.random() * w.W;
       }
     });
     if (w.shake > 0) w.shake = Math.max(0, w.shake - dt * 3);
+    if (w.whiff > 0) w.whiff = Math.max(0, w.whiff - dt * 3);
     if (w.flashRevive > 0) w.flashRevive = Math.max(0, w.flashRevive - dt * 1.4);
   }
 
   function pushTrail(w) {
-    w.trail.unshift({ x: w.ballX, y: w.ballY });
+    w.trail.unshift({ x: w.orbScreen.x, y: w.orbScreen.y });
     if (w.trail.length > 16) w.trail.pop();
   }
 
   function die(w) {
     if (w.dead) return;
     w.dead = true;
+    w.holding = false;
+    w.orbitWell = null;
     w.shake = 1;
     for (let i = 0; i < (hqRef.current ? 22 : 10); i++)
       w.sparks.push({
-        x: w.ballX,
-        y: w.ballY,
+        x: w.orbScreen.x,
+        y: w.orbScreen.y,
         vx: (Math.random() - 0.5) * 320,
         vy: (Math.random() - 0.5) * 320,
         life: 1,
@@ -343,6 +524,11 @@ export default function GameStage({
         let dt = (ts - w.last) / 1000;
         w.last = ts;
         if (dt > 0.05) dt = 0.05;
+        // debug autopilot drives the inputs so a run plays itself (no taps)
+        if (autoRef.current && phaseRef.current !== 'dead' && !pausedRef.current) {
+          if (!w.started) grab();
+          else autopilot(w);
+        }
         const running = phaseRef.current === 'run' && w.started && !w.dead && !pausedRef.current;
         if (running) step(w, dt);
         else if (!w.started && !pausedRef.current) idle(w, dt);
@@ -365,10 +551,12 @@ export default function GameStage({
 
   const sk = skinRef.current;
   const starsAlpha = Math.max(0, Math.min(1, (w.score - 3600) / 1800));
+  const anchorY = H * ANCHOR;
+  const screenYOf = (wy) => anchorY - (wy - w.camY);
 
   return (
     // Sky-toned background as a safety net behind the canvas.
-    <Pressable style={[styles.fill, { backgroundColor: sky.bot }]} onPressIn={tap}>
+    <Pressable style={[styles.fill, { backgroundColor: sky.bot }]} onPressIn={grab} onPressOut={release}>
       {/* flex:1 (not a numeric height) so the Skia surface fills the full screen
           on the New Architecture — a fixed pixel height under-sizes the canvas. */}
       <Canvas style={styles.fill}>
@@ -407,10 +595,54 @@ export default function GameStage({
             );
           })}
 
-          {/* pillars */}
-          {w.obstacles.map((o, i) => (
-            <Pillar key={`ob${i}`} o={o} H={H} dark={sky.dark} />
-          ))}
+          {/* gravity wells */}
+          {w.wells.map((wl, i) => {
+            const wsy = screenYOf(wl.y);
+            if (wsy < -120 || wsy > H + 120) return null;
+            return <Well key={`wl${i}`} wl={wl} sx={wl.x} sy={wsy} dark={sky.dark} hq={highQuality} />;
+          })}
+
+          {/* active orbit ring + tether while held — brightens as it charges */}
+          {w.holding && w.orbitWell && (() => {
+            const charge = clamp((w.orbitSpeed - SPEED_MIN) / (SPEED_MAX - SPEED_MIN), 0, 1);
+            const wsy = screenYOf(w.orbitWell.y);
+            // aim arrow: orb flings along its current travel direction. World +y
+            // is up, screen +y is down, so flip vy for screen space.
+            const dmag = Math.hypot(w.orb.vx, w.orb.vy) || 1;
+            const ux = w.orb.vx / dmag;
+            const uy = -w.orb.vy / dmag;
+            const ox = w.orbScreen.x;
+            const oy = w.orbScreen.y;
+            const len = 30 + charge * 48;
+            const tx = ox + ux * len;
+            const ty = oy + uy * len;
+            const a = Math.atan2(uy, ux);
+            const hb = 9;
+            const aimC = rgba(ASC.gold, 0.92);
+            return (
+              <Group>
+                <Circle
+                  cx={w.orbitWell.x}
+                  cy={wsy}
+                  r={w.orbitR}
+                  style="stroke"
+                  strokeWidth={1.6 + charge * 3.4}
+                  color={rgba(w.orbitWell.tint, (sky.dark ? 0.5 : 0.65) + charge * 0.3)}
+                />
+                <Line
+                  p1={vec(w.orbitWell.x, wsy)}
+                  p2={vec(ox, oy)}
+                  style="stroke"
+                  strokeWidth={2 + charge * 2}
+                  color={rgba(w.orbitWell.tint, sky.dark ? 0.6 : 0.8)}
+                />
+                {/* aim arrow (shaft + two barbs) */}
+                <Line p1={vec(ox, oy)} p2={vec(tx, ty)} style="stroke" strokeWidth={3} strokeCap="round" color={aimC} />
+                <Line p1={vec(tx, ty)} p2={vec(tx + Math.cos(a + 2.5) * hb, ty + Math.sin(a + 2.5) * hb)} style="stroke" strokeWidth={3} strokeCap="round" color={aimC} />
+                <Line p1={vec(tx, ty)} p2={vec(tx + Math.cos(a - 2.5) * hb, ty + Math.sin(a - 2.5) * hb)} style="stroke" strokeWidth={3} strokeCap="round" color={aimC} />
+              </Group>
+            );
+          })()}
 
           {/* trail */}
           {w.trail.map((p, i) => {
@@ -425,8 +657,8 @@ export default function GameStage({
             <Circle key={`sp${i}`} cx={s.x} cy={s.y} r={s.r} color={rgba(sk.trail, Math.max(0, s.life) * 0.8)} />
           ))}
 
-          {/* ball */}
-          <Ball x={w.ballX} y={w.ballY} rot={w.rot} skin={sk} />
+          {/* orb */}
+          <Ball x={w.orbScreen.x} y={w.orbScreen.y} rot={w.rot || 0} skin={sk} />
 
           {/* revive flash */}
           {w.flashRevive > 0 && (
@@ -474,10 +706,9 @@ export default function GameStage({
       {/* ready overlay */}
       {phase === 'ready' && (
         <View style={styles.ready} pointerEvents="none">
-          <IconArrowUp size={34} color={sky.dark ? ASC.inkOn : ASC.ink} />
-          <Text style={[styles.readyTitle, { color: sky.dark ? ASC.inkOn : ASC.ink }]}>Tap to rise</Text>
+          <Text style={[styles.readyTitle, { color: sky.dark ? ASC.inkOn : ASC.ink }]}>Hold to charge orbit</Text>
           <Text style={[styles.readySub, { color: sky.dark ? ASC.inkOn2 : ASC.ink2 }]}>
-            Keep tapping. Thread the glass. Climb.
+            The longer you hold, the harder the fling. Release toward the next well.
           </Text>
         </View>
       )}
@@ -485,52 +716,34 @@ export default function GameStage({
   );
 }
 
-// ---- pillar (frosted glass) ------------------------------------------------
-function Pillar({ o, H, dark }) {
-  const r = 16;
-  const top = o.gapY - o.gapH / 2;
-  const bot = o.gapY + o.gapH / 2;
-  // Colored frosted glass: each pipe carries a tint so they're not all clear.
-  const tint = o.tint || '#FFFFFF';
-  const edgeA = dark ? 0.55 : 0.8;
-  const midA = dark ? 0.26 : 0.4;
-  const stroke = rgba(tint, dark ? 0.55 : 0.85);
-  const cap = rgba(tint, dark ? 0.4 : 0.6);
-
-  const piece = (key, drawY, drawH, capY) => {
-    if (drawH <= 0) return null;
-    // extend past the screen edge so only the gap-facing corners show rounding
-    const ry = key === 'top' ? drawY - r : drawY;
-    const rh = key === 'top' ? drawH + r : drawH + r;
-    return (
-      <Group key={key}>
-        <RoundedRect x={o.x} y={ry} width={o.w} height={rh} r={r}>
-          <LinearGradient
-            start={vec(o.x, 0)}
-            end={vec(o.x + o.w, 0)}
-            positions={[0, 0.5, 1]}
-            colors={[rgba(tint, midA * 0.7), rgba(tint, edgeA * 0.55), rgba(tint, midA * 0.6)]}
-          />
-        </RoundedRect>
-        <RoundedRect x={o.x + 0.7} y={ry + 0.7} width={o.w - 1.4} height={rh - 1.4} r={r} style="stroke" strokeWidth={1.6} color={stroke} />
-        {/* inner light streak (kept white for the glass highlight) */}
-        <Rect
-          x={o.x + o.w * 0.22}
-          y={drawY + (key === 'top' ? 0 : 6)}
-          width={3}
-          height={drawH - 6}
-          color="rgba(255,255,255,0.45)"
-        />
-        {/* glowing lip cap at the gap end */}
-        <RoundedRect x={o.x - 4} y={capY} width={o.w + 8} height={10} r={5} color={cap} />
-      </Group>
-    );
-  };
-
+// ---- gravity well (luminous frosted glass) ---------------------------------
+function Well({ wl, sx, sy, dark, hq }) {
+  const tint = wl.tint;
+  const R = wl.r;
   return (
     <Group>
-      {piece('top', 0, top, top - 10)}
-      {piece('bot', bot, H - bot, bot)}
+      {/* soft halo */}
+      <Circle cx={sx} cy={sy} r={R * 2.4}>
+        {hq && <BlurMask blur={10} style="normal" />}
+        <RadialGradient
+          c={vec(sx, sy)}
+          r={R * 2.4}
+          positions={[0.2, 1]}
+          colors={[rgba(tint, dark ? 0.42 : 0.5), rgba(tint, 0)]}
+        />
+      </Circle>
+      {/* outer capture ring */}
+      <Circle cx={sx} cy={sy} r={R} style="stroke" strokeWidth={2} color={rgba(tint, dark ? 0.7 : 0.9)} />
+      {/* frosted core */}
+      <Circle cx={sx} cy={sy} r={R * 0.62}>
+        <RadialGradient
+          c={vec(sx - R * 0.18, sy - R * 0.18)}
+          r={R * 0.7}
+          colors={[rgba('#ffffff', 0.9), rgba(tint, 0.5)]}
+        />
+      </Circle>
+      {/* bright pip */}
+      <Circle cx={sx - R * 0.16} cy={sy - R * 0.16} r={R * 0.16} color="rgba(255,255,255,0.92)" />
     </Group>
   );
 }
