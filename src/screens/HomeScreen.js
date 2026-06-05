@@ -2,12 +2,13 @@
 // Ported from ascend-screens.jsx <HomeScreen>. Adds Playtime stat (PRD §6).
 
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { sfx } from '../audio';
 import MenuScreen from '../components/MenuScreen';
 import Glass from '../components/Glass';
 import Orb from '../components/Orb';
 import Float from '../components/Float';
-import { PrimaryButton, TextButton } from '../components/Buttons';
+import { PrimaryButton } from '../components/Buttons';
 import { IconArrowUp, IconBest } from '../components/Icons';
 import { ASC, FONT } from '../theme';
 import { fmtNum, fmtTime } from '../utils/format';
@@ -33,6 +34,7 @@ export default function HomeScreen({
   animate,
   onPlay,
   onHowTo,
+  onStory,
   width,
   height,
   topInset,
@@ -80,12 +82,42 @@ export default function HomeScreen({
 
       {/* play */}
       <PrimaryButton label="Play" icon={<IconArrowUp size={20} color="#08233C" />} onPress={onPlay} />
-      {onHowTo && <TextButton label="How to play" onPress={onHowTo} style={{ marginTop: 8 }} />}
+      <View style={styles.links}>
+        {onHowTo && (
+          <Pressable
+            onPress={() => { sfx('tap'); onHowTo(); }}
+            style={({ pressed }) => [styles.pill, pressed && styles.pillPressed]}
+          >
+            <Text style={styles.pillText}>How to play</Text>
+          </Pressable>
+        )}
+        {onStory && (
+          <Pressable
+            onPress={() => { sfx('tap'); onStory(); }}
+            style={({ pressed }) => [styles.pill, pressed && styles.pillPressed]}
+          >
+            <Text style={styles.pillText}>Story</Text>
+          </Pressable>
+        )}
+      </View>
     </MenuScreen>
   );
 }
 
 const styles = StyleSheet.create({
+  links: { flexDirection: 'row', gap: 10, marginTop: 12 },
+  pill: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.5)',
+  },
+  pillPressed: { backgroundColor: 'rgba(255,255,255,0.4)' },
+  pillText: { fontFamily: FONT.sansSemi, fontSize: 14, color: ASC.ink },
   eyebrow: { fontFamily: FONT.mono, fontSize: 10, letterSpacing: 4, color: ASC.ink2, textTransform: 'uppercase' },
   eyebrowDk: { fontFamily: FONT.mono, fontSize: 10, letterSpacing: 2.6, color: ASC.ink2, textTransform: 'uppercase' },
   wordmark: { fontFamily: FONT.display, fontSize: 60, color: ASC.ink, marginTop: 8, letterSpacing: -1.5 },

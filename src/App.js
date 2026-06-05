@@ -29,6 +29,7 @@ import {
 import { authenticateGameCenter, submitScore as submitLeaderboard } from './leaderboard';
 import { isValidGiftCode } from './giftcodes';
 import { AUTO_DEMO, DEMO_SCORE, DEMO_SCREEN } from './debug';
+import { initAudio, setSoundEnabled } from './audio';
 import GameStage from './game/GameStage';
 import HomeScreen from './screens/HomeScreen';
 import LeaderboardScreen from './screens/LeaderboardScreen';
@@ -36,6 +37,7 @@ import CosmeticsScreen from './screens/CosmeticsScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import GameOverOverlay from './screens/GameOverOverlay';
 import Onboarding from './screens/Onboarding';
+import Cinematic from './screens/Cinematic';
 import PaywallModal from './screens/PaywallModal';
 import BottomNav from './components/BottomNav';
 import { IconClose } from './components/Icons';
@@ -66,6 +68,8 @@ function Game() {
   const [statusDark, setStatusDark] = useState(false);
   const [onboarded, setOnboarded] = useState(false); // seen the how-to-play tutorial
   const [tutorial, setTutorial] = useState(null); // null | 'onboard' | 'manual'
+  const [introSeen, setIntroSeen] = useState(false); // seen the cinematic intro
+  const [showIntro, setShowIntro] = useState(false); // cinematic currently playing
 
   const [best, setBest] = useState(0);
   const [games, setGames] = useState(0);
@@ -97,6 +101,7 @@ function Game() {
         ['tweaks', DEFAULT_TWEAKS],
         ['giftPro', false],
         ['onboarded', false],
+        ['introSeen', false],
       ]);
       if (!alive) return;
       setBest(s.best);
@@ -108,6 +113,7 @@ function Game() {
       setSettings({ ...DEFAULT_SETTINGS, ...s.settings });
       setTweaks({ ...DEFAULT_TWEAKS, ...s.tweaks });
       setOnboarded(!!s.onboarded);
+      setIntroSeen(!!s.introSeen);
       setLoaded(true);
     })();
     return () => {
@@ -124,6 +130,11 @@ function Game() {
   useEffect(() => { if (loaded) LS.set('settings', settings); }, [settings, loaded]);
   useEffect(() => { if (loaded) LS.set('tweaks', tweaks); }, [tweaks, loaded]);
   useEffect(() => { if (loaded) LS.set('onboarded', onboarded); }, [onboarded, loaded]);
+  useEffect(() => { if (loaded) LS.set('introSeen', introSeen); }, [introSeen, loaded]);
+
+  // ---- audio: start once, then follow the Sound setting ----
+  useEffect(() => { if (loaded) initAudio(settings.sound); }, [loaded]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (loaded) setSoundEnabled(settings.sound); }, [settings.sound, loaded]);
 
   // ---- monetization init (once) ----
   // Start Game Center, configure RevenueCat with a customer-info listener (the
@@ -185,6 +196,18 @@ function Game() {
   }, [tutorial, beginRun]);
 
   const openTutorial = useCallback(() => setTutorial('manual'), []);
+  const playIntro = useCallback(() => setShowIntro(true), []);
+  const onIntroDone = useCallback(() => {
+    setShowIntro(false);
+    setIntroSeen(true);
+  }, []);
+
+  // Play the cinematic once on first launch (not during debug captures).
+  useEffect(() => {
+    if (!loaded || introSeen) return;
+    if (__DEV__ && (AUTO_DEMO || DEMO_SCREEN)) return;
+    setShowIntro(true);
+  }, [loaded, introSeen]);
 
   // Debug capture mode: skip the menu/tutorial and auto-start a run on launch.
   useEffect(() => {
@@ -198,7 +221,15 @@ function Game() {
   useEffect(() => {
     if (!__DEV__ || !loaded || !DEMO_SCREEN) return;
     if (DEMO_SCREEN === 'tutorial') setTutorial('manual');
-    else if (['play', 'ranks', 'skins', 'settings'].includes(DEMO_SCREEN)) {
+    else if (DEMO_SCREEN === 'cinematic') setShowIntro(true);
+    else if (DEMO_SCREEN === 'ready') beginRun(); // in-game "ready" overlay (no input)
+    else if (DEMO_SCREEN === 'paywall') setPaywall({ intent: 'skin' });
+    else if (DEMO_SCREEN === 'gameover') {
+      setStatusDark(false);
+      setRunKey((k) => k + 1);
+      setMode('playing');
+      setOver({ score: 4820, isBest: true, band: 'Stratosphere' });
+    } else if (['play', 'ranks', 'skins', 'settings'].includes(DEMO_SCREEN)) {
       setMode('menu');
       setTab(DEMO_SCREEN);
     }
@@ -405,6 +436,7 @@ function Game() {
         animate={menuAnimate}
         onPlay={startGame}
         onHowTo={openTutorial}
+        onStory={playIntro}
         width={width}
         height={height}
         topInset={topInset}
@@ -483,6 +515,15 @@ function Game() {
           animate={menuAnimate}
         />
       )}
+      <Cinematic
+        visible={showIntro}
+        onDone={onIntroDone}
+        skin={skin}
+        reduceMotion={settings.reduceMotion}
+        width={width}
+        height={height}
+        topInset={topInset}
+      />
     </View>
   );
 }

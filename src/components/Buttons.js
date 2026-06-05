@@ -5,11 +5,16 @@ import React from 'react';
 import { Text, Pressable, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ASC, FONT } from '../theme';
+import { sfx } from '../audio';
 
 export function PrimaryButton({ label, icon, onPress, disabled, style, size = 'lg' }) {
+  const press = () => {
+    sfx('tap');
+    onPress && onPress();
+  };
   return (
     <Pressable
-      onPress={disabled ? undefined : onPress}
+      onPress={disabled ? undefined : press}
       style={({ pressed }) => [styles.primaryWrap, style, disabled && { opacity: 0.55 }, pressed && !disabled && styles.pressed]}
     >
       <LinearGradient

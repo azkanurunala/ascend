@@ -89,44 +89,75 @@ function makeSkin([name, h, s, l, cs, tag]) {
   return { id: name.toLowerCase().replace(/[^a-z0-9]+/g, '-'), name, c1, c2, glow, core, trail, price: 0, tag };
 }
 
-// 48 hand-tuned, distinct orbs: [name, hue, sat, light, hueShift, tag].
-// hueShift ≠ 0 makes a two-color gradient orb; the bigger the shift the more the
-// two colors differ. Bold = saturated, Soft = pastel, Mix = strong dual-color.
-const SKIN_SPECS = [
-  // bold single-color
-  ['Crimson', 352, 0.9, 0.5, 0, 'Bold'], ['Ruby', 358, 0.9, 0.48, 0, 'Bold'],
-  ['Magenta', 315, 0.95, 0.55, 0, 'Bold'], ['Fuchsia', 310, 1.0, 0.55, 0, 'Neon'],
-  ['Violet', 276, 0.85, 0.6, 0, 'Bold'], ['Cobalt', 225, 0.95, 0.52, 0, 'Bold'],
-  ['Azure', 205, 0.88, 0.58, 0, 'Bold'], ['Cyan', 185, 0.95, 0.56, 0, 'Neon'],
-  ['Teal', 176, 0.82, 0.48, 0, 'Jewel'], ['Emerald', 145, 0.9, 0.44, 0, 'Bold'],
-  ['Jade', 150, 0.72, 0.5, 0, 'Jewel'], ['Lime', 92, 0.92, 0.58, 0, 'Neon'],
-  ['Gold', 48, 0.95, 0.55, 0, 'Bold'], ['Marigold', 45, 0.95, 0.6, 0, 'Bold'],
-  ['Tangerine', 26, 0.95, 0.56, 0, 'Bold'], ['Indigo', 244, 0.85, 0.5, 0, 'Jewel'],
-  // soft pastels
-  ['Blush', 345, 0.5, 0.8, 16, 'Soft'], ['Rose', 335, 0.68, 0.7, 0, 'Soft'],
-  ['Lavender', 266, 0.45, 0.78, 10, 'Soft'], ['Periwinkle', 238, 0.5, 0.74, 20, 'Soft'],
-  ['Ice', 200, 0.38, 0.84, 0, 'Soft'], ['Glacier', 195, 0.42, 0.82, 0, 'Soft'],
-  ['Seafoam', 160, 0.5, 0.76, 0, 'Soft'], ['Mint', 152, 0.55, 0.76, 0, 'Soft'],
-  ['Sky', 200, 0.62, 0.7, 0, 'Soft'], ['Peach', 22, 0.55, 0.78, 12, 'Soft'],
-  ['Honey', 40, 0.68, 0.66, 0, 'Soft'], ['Amber', 42, 0.92, 0.55, 10, 'Bold'],
-  ['Coral', 10, 0.85, 0.65, 16, 'Soft'], ['Lilac', 285, 0.4, 0.8, -12, 'Soft'],
-  // bold two-color gradients
-  ['Tide', 210, 0.85, 0.55, -72, 'Mix'], ['Reef', 190, 0.85, 0.54, -46, 'Mix'],
-  ['Tropic', 150, 0.85, 0.52, 40, 'Mix'], ['Lagoon', 205, 0.8, 0.55, -42, 'Mix'],
-  ['Mojito', 100, 0.85, 0.55, 52, 'Mix'], ['Sunset', 340, 0.95, 0.6, 44, 'Mix'],
-  ['Phoenix', 12, 1.0, 0.55, 42, 'Mix'], ['Mango', 40, 0.92, 0.6, -26, 'Mix'],
-  ['Citrus', 52, 0.9, 0.58, -28, 'Mix'], ['Nebula', 280, 0.88, 0.5, -70, 'Mix'],
-  ['Galaxy', 250, 0.9, 0.46, 62, 'Mix'], ['Twilight', 268, 0.72, 0.5, -58, 'Mix'],
-  ['Cosmos', 232, 0.82, 0.5, -46, 'Mix'], ['Iris', 285, 0.8, 0.56, 64, 'Mix'],
-  ['Orchid', 300, 0.7, 0.62, -44, 'Mix'], ['Berry', 322, 0.8, 0.52, -44, 'Mix'],
-  ['Spectra', 190, 0.85, 0.58, 86, 'Mix'], ['Plum', 290, 0.72, 0.46, -24, 'Jewel'],
+// Build a MULTI-color orb from explicit hex stops (e.g. sunset, ocean). The
+// body renders every stop as one smooth diagonal sweep; glow/trail derive from
+// the middle stop, lightened. `colors` can hold 2, 3, or 4 stops.
+const slug = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+function makeGrad([name, colors, tag = 'Gradient']) {
+  const mid = colors[Math.floor((colors.length - 1) / 2)];
+  return {
+    id: slug(name),
+    name,
+    colors,
+    c1: colors[0],
+    c2: colors[colors.length - 1],
+    glow: mixHex(mid, '#FFFFFF', 0.16),
+    trail: mixHex(mid, '#FFFFFF', 0.34),
+    core: '#F6FBFF',
+    price: 0,
+    tag,
+  };
+}
+
+// Distinct SOLID orbs — one per color family, ~35°+ apart so none look alike.
+// [name, hue, sat, light, hueShift, tag].
+const SOLID_SPECS = [
+  ['Crimson', 352, 0.9, 0.5, 0, 'Bold'],
+  ['Tangerine', 26, 0.95, 0.56, 0, 'Bold'],
+  ['Gold', 46, 0.95, 0.55, 0, 'Bold'],
+  ['Lime', 92, 0.9, 0.56, 0, 'Neon'],
+  ['Emerald', 150, 0.88, 0.46, 0, 'Bold'],
+  ['Cyan', 188, 0.95, 0.56, 0, 'Neon'],
+  ['Cobalt', 226, 0.92, 0.52, 0, 'Bold'],
+  ['Violet', 278, 0.85, 0.6, 0, 'Bold'],
+  ['Magenta', 312, 0.95, 0.55, 0, 'Neon'],
 ];
 
-// 50 orbs: free default + 48 distinct + the animated Aurora. Pro unlocks all.
+// Multi-color GRADIENT orbs — the showcase. Each is a REAL multi-hue blend:
+// [name, [stops…], tag?]. Deliberately contrasting (e.g. blue+green, pink+blue)
+// so a single orb visibly holds two or three colors at once. Bold combos lead.
+const GRADIENT_SPECS = [
+  ['Tide', ['#2BE0A6', '#2E86E8']],               // green ↔ blue
+  ['Spring', ['#C0F65A', '#34D399', '#2E86E8']],  // lime → green → blue
+  ['Peacock', ['#12E0C4', '#2E6FE0', '#7A4ED8']], // teal → blue → violet
+  ['Citrus', ['#FFE15A', '#3DE08A']],             // yellow ↔ green
+  ['Mojito', ['#CFFF6A', '#1FC9A8']],             // lime ↔ teal
+  ['Forest', ['#9AE66E', '#1E8A5A']],             // bright ↔ deep green
+  ['Galaxy', ['#3A8FE0', '#A06CF0', '#FF6FD8']],  // blue → purple → pink
+  ['Nebula', ['#2BE0E0', '#6C7AF0', '#C06CF0']],  // cyan → indigo → purple
+  ['Marine', ['#3DE0E0', '#2E4FE0']],             // cyan ↔ deep blue
+  ['Seabreeze', ['#A8F0E0', '#6CA0F0']],          // aqua ↔ sky (pale)
+  ['Sunset', ['#FF8A4C', '#FF477E', '#9D4EDD']],  // orange → pink → purple
+  ['Sunrise', ['#FFE08A', '#FF6FA0']],            // amber ↔ pink
+  ['Dawn', ['#FFD27F', '#A78BFA']],               // peach ↔ violet
+  ['Ember', ['#FFC24B', '#E0245E']],              // amber ↔ crimson
+  ['Volcano', ['#FFD93D', '#FF6B3D', '#C9184A']], // yellow → orange → red
+  ['Coral', ['#FF9E6D', '#FF477E']],              // peach ↔ rose
+  ['Twilight', ['#FFB07C', '#A06CF0', '#3A4ED8']],// peach → purple → blue
+  ['Bubblegum', ['#FF8AD8', '#A06CF0']],          // pink ↔ purple
+  ['Berry', ['#FF6FA0', '#6A0572']],              // pink ↔ plum
+  ['Grape', ['#B07CF0', '#4A2F91']],              // violet ↔ deep purple
+  ['Opal', ['#CFF6E0', '#A3D0FF', '#E0B3FF']],    // iridescent pastel
+  ['Prism', ['#FF6F91', '#FFD36E', '#34E0A0', '#3A8FE0'], 'Rare'], // 4-color
+];
+
+// Free default + showcase multi-color gradients + distinct solids + animated
+// Aurora. Pro unlocks all. Gradients lead so the variety shows immediately.
 export const ASC_SKINS = [
-  { id: 'drift', name: 'Drift', c1: '#FFFFFF', c2: '#D6ECFF', core: '#FFFFFF', glow: '#BFE3FF', trail: '#CFE8FF', price: 0, tag: 'Default' },
-  ...SKIN_SPECS.map(makeSkin),
-  { id: 'aurora', name: 'Aurora', c1: '#9CFFC9', c2: '#5AA9F2', core: '#E8FFF2', glow: '#7FD8E6', trail: '#B6FFE0', price: 0, tag: 'Rare', rainbow: true },
+  { id: 'drift', name: 'Drift', colors: ['#FFFFFF', '#D6ECFF'], c1: '#FFFFFF', c2: '#D6ECFF', core: '#FFFFFF', glow: '#BFE3FF', trail: '#CFE8FF', price: 0, tag: 'Default' },
+  ...GRADIENT_SPECS.map(makeGrad),
+  ...SOLID_SPECS.map(makeSkin),
+  { id: 'aurora', name: 'Aurora', colors: ['#9CFFC9', '#7FD8E6', '#5AA9F2'], c1: '#9CFFC9', c2: '#5AA9F2', core: '#E8FFF2', glow: '#7FD8E6', trail: '#B6FFE0', price: 0, tag: 'Rare', rainbow: true },
 ];
 
 export function skinById(id) {

@@ -1,6 +1,7 @@
 // ============ COSMETICS / SKINS ============
-// Orb skins (306 total): preview + a virtualized grid so the full set scrolls
-// smoothly. Pro unlocks everything; locked skins open the paywall.
+// Orb skins: a pinned preview card on top + a virtualized grid that scrolls
+// beneath it (the card stays in view). Pro unlocks everything; locked skins
+// open the paywall.
 
 import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet, FlatList } from 'react-native';
@@ -25,16 +26,16 @@ export default function CosmeticsScreen({ owned, equipped, onEquip, onUnlock, pr
       <ScreenHead eyebrow="COSMETIC · NO EDGE" title="Skins" />
 
       {/* preview */}
-      <View style={{ paddingHorizontal: 18, marginBottom: 16 }}>
-        <Glass tone="hi" pad={22} radius={26} innerStyle={{ alignItems: 'center' }}>
-          <Float enabled={animate} distance={8} duration={3000} style={{ marginVertical: 8 }}>
-            <Orb skin={skin} size={96} />
+      <View style={{ paddingHorizontal: 18, marginBottom: 12 }}>
+        <Glass tone="hi" pad={16} radius={24} innerStyle={{ alignItems: 'center' }}>
+          <Float enabled={animate} distance={6} duration={3000} style={{ marginVertical: 2 }}>
+            <Orb skin={skin} size={70} />
           </Float>
           <View style={styles.nameRow}>
             <Text style={styles.name}>{skin.name}</Text>
             <Text style={styles.tag}>{skin.tag.toUpperCase()}</Text>
           </View>
-          <View style={{ marginTop: 16, width: '100%' }}>
+          <View style={{ marginTop: 12, width: '100%' }}>
             {isEquipped ? (
               <View style={styles.equipped}>
                 <IconCheck size={16} color={ASC.mint} />
@@ -75,14 +76,16 @@ export default function CosmeticsScreen({ owned, equipped, onEquip, onUnlock, pr
 
   return (
     <MenuScreen width={width} height={height} scroll={false}>
+      {/* Pinned/floating header — preview card stays put while the grid scrolls */}
+      <View style={{ paddingTop: topInset + 30 }}>{header}</View>
       <FlatList
+        style={styles.list}
         data={ASC_SKINS}
         keyExtractor={(s) => s.id}
         renderItem={renderItem}
         numColumns={3}
-        ListHeaderComponent={header}
         columnWrapperStyle={styles.rowWrap}
-        contentContainerStyle={{ paddingTop: topInset + 30, paddingBottom: bottomInset + 120 }}
+        contentContainerStyle={{ paddingTop: 2, paddingBottom: bottomInset + 120 }}
         showsVerticalScrollIndicator={false}
         initialNumToRender={12}
         maxToRenderPerBatch={12}
@@ -95,7 +98,7 @@ export default function CosmeticsScreen({ owned, equipped, onEquip, onUnlock, pr
 
 const styles = StyleSheet.create({
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  name: { fontFamily: FONT.display, fontSize: 22, color: ASC.ink },
+  name: { fontFamily: FONT.display, fontSize: 19, color: ASC.ink },
   tag: {
     fontFamily: FONT.mono,
     fontSize: 9.5,
@@ -107,9 +110,10 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     overflow: 'hidden',
   },
-  equipped: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 13 },
+  equipped: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 10 },
   equippedText: { fontFamily: FONT.sansBold, fontSize: 14, color: ASC.mint },
 
+  list: { flex: 1 },
   gridLabel: { fontFamily: FONT.monoSemi, fontSize: 10, letterSpacing: 1.2, color: ASC.ink3, paddingHorizontal: 20, marginBottom: 10 },
   rowWrap: { gap: 10, paddingHorizontal: 18, marginBottom: 10 },
   cell: {

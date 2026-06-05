@@ -23,6 +23,7 @@ import {
 
 import { ASC, FONT, skyAt } from '../theme';
 import { rgba } from '../utils/color';
+import { sfx } from '../audio';
 
 const BALL_R = 14;
 const ORB_GRAV = 480; // downward world pull (px/s²) — what you slingshot against
@@ -263,7 +264,9 @@ export default function GameStage({
     const dx = w.orb.x - well.x;
     const dy = w.orb.y - well.y;
     const dist = Math.hypot(dx, dy) || 1;
-    const r = clamp(dist, ORBIT_MIN, ORBIT_MAX);
+    // orbit at the orb's ACTUAL arrival distance (only clamp the extremes) so
+    // latching never teleports the orb — keeps the motion perfectly continuous.
+    const r = clamp(dist, ORBIT_MIN, CAPTURE_R);
     const ang = Math.atan2(dy, dx);
     const speed = clamp(Math.hypot(w.orb.vx, w.orb.vy), SPEED_MIN, SPEED_MAX);
     // keep spinning the way the orb was already travelling around the well
@@ -280,6 +283,9 @@ export default function GameStage({
       well.scored = true;
       w.bonus += WELL_BONUS;
       w.pops.push({ x: w.orbScreen.x + 16, y: w.orbScreen.y - 26, life: 1, val: WELL_BONUS });
+      if (!autoRef.current) sfx('well'); // chime on a fresh well (quiet during demo)
+    } else if (!autoRef.current) {
+      sfx('grab'); // soft tick on re-latching an already-scored well
     }
   }
   const grab = () => {
@@ -306,6 +312,7 @@ export default function GameStage({
     if (!w || !w.holding) return;
     w.holding = false;
     w.orbitWell = null;
+    if (!autoRef.current) sfx('launch'); // slingshot whoosh (quiet during demo)
     // velocity is already the orbital tangent — add a small slingshot kick
     w.orb.vx *= RELEASE_BOOST;
     w.orb.vy *= RELEASE_BOOST;
@@ -330,27 +337,52 @@ export default function GameStage({
     }
     return best;
   }
+  // Look-ahead: simulate the slingshot arc from the orb's current state and
+  // report whether it would pass within grab range of target `t`. Lets the
+  // autopilot release ONLY when the fling will actually reach the next well —
+  // so the demo chains reliably and climbs smoothly (no falls, no rescues).
+  function arcReaches(w, t, D) {
+    let x = w.orb.x, y = w.orb.y;
+    let vx = w.orb.vx * RELEASE_BOOST, vy = w.orb.vy * RELEASE_BOOST;
+    const g = ORB_GRAV * D.grav, dt = 1 / 60;
+    for (let s = 0; s < 130; s++) {
+      vy -= g * dt;
+      x += vx * dt;
+      y += vy * dt;
+      if (x < BALL_R) { x = BALL_R; vx = Math.abs(vx) * 0.92; }
+      else if (x > w.W - BALL_R) { x = w.W - BALL_R; vx = -Math.abs(vx) * 0.92; }
+      if (Math.hypot(x - t.x, y - t.y) < CAPTURE_R * 0.85) return true;
+      if (vy < 0 && y < t.y - CAPTURE_R) return false; // falling below the target — missed
+    }
+    return false;
+  }
   function autopilot(w) {
+    const D = DIFF[difRef.current] || DIFF.normal;
     if (w.holding && w.orbitWell) {
       if (!w.autoTarget || w.autoTarget.y <= w.orbitWell.y) w.autoTarget = pickTargetAbove(w, w.orbitWell);
       const t = w.autoTarget;
-      if (t) {
-        const tdx = t.x - w.orb.x;
-        const tdy = t.y + 36 - w.orb.y; // aim a touch high to fight the fall
-        const tl = Math.hypot(tdx, tdy) || 1;
-        const vl = Math.hypot(w.orb.vx, w.orb.vy) || 1;
-        const dot = (w.orb.vx * tdx + w.orb.vy * tdy) / (vl * tl);
-        const need = Math.min(SPEED_MAX * 0.92, 480 + tl * 0.9);
-        if (w.orb.vy > 0 && dot > 0.94 && w.orbitSpeed >= need) release();
-        else if (w.orbitSpeed >= SPEED_MAX * 0.99 && w.orb.vy > 0 && dot > 0.78) release();
-      } else if (w.orb.vy > 0 && w.orbitSpeed > 640) {
-        release();
+      if (!t) {
+        if (w.orb.vy > 0 && w.orbitSpeed > 660) release();
+        return;
       }
+      // need at least enough charge to climb to the target, then release the
+      // first frame the predicted arc actually reaches it
+      const dy = Math.max(90, t.y - w.orb.y);
+      const minCharge = clamp(1.08 * Math.sqrt(2 * ORB_GRAV * D.grav * dy), SPEED_MIN + 120, SPEED_MAX);
+      if (w.orbitSpeed >= minCharge && w.orb.vy > 0 && arcReaches(w, t, D)) release();
+      else if (w.orbitSpeed >= SPEED_MAX * 0.995 && w.orb.vy > 0) release(); // failsafe
     } else {
-      const well = nearestWell(w);
-      if (well) {
-        grab();
-        w.autoTarget = pickTargetAbove(w, well);
+      // flying: grab the target as soon as it's in range (else any nearby well)
+      const t = w.autoTarget;
+      if (t && Math.hypot(t.x - w.orb.x, t.y - w.orb.y) < CAPTURE_R) {
+        latchTo(w, t);
+        w.autoTarget = pickTargetAbove(w, t);
+      } else {
+        const well = nearestWell(w);
+        if (well) {
+          latchTo(w, well);
+          w.autoTarget = pickTargetAbove(w, well);
+        }
       }
     }
   }
@@ -490,10 +522,30 @@ export default function GameStage({
 
   function die(w) {
     if (w.dead) return;
+    // Demo autopilot never dies — rescue the orb onto a visible well above and
+    // keep climbing. This avoids run-ending remounts that make the cinematic
+    // stutter; the climb stays continuous and smooth.
+    if (autoRef.current) {
+      const safe =
+        w.wells.find((wl) => wl.y > w.camTarget - w.H * 0.2 && wl.y < w.camTarget + w.H * 0.4) ||
+        w.wells.find((wl) => wl.y > w.orb.y) ||
+        w.wells[w.wells.length - 1];
+      if (safe) {
+        w.orb.x = safe.x;
+        w.orb.y = safe.y;
+        w.orb.vx = 0;
+        w.orb.vy = 0;
+        w.holding = false;
+        w.orbitWell = null;
+        w.autoTarget = null;
+      }
+      return;
+    }
     w.dead = true;
     w.holding = false;
     w.orbitWell = null;
     w.shake = 1;
+    sfx('over');
     for (let i = 0; i < (hqRef.current ? 22 : 10); i++)
       w.sparks.push({
         x: w.orbScreen.x,
@@ -754,23 +806,24 @@ function Ball({ x, y, rot, skin }) {
   const c1 = skin.c1 || skin.core || '#FFFFFF';
   const c2 = skin.c2 || skin.glow || c1;
   const halo = skin.glow || c2;
+  const bodyColors = skin.colors && skin.colors.length >= 2 ? skin.colors : [c1, c2];
   return (
     <Group transform={[{ translateX: x }, { translateY: y }, { rotate: rot * 0.4 }]}>
       {/* glow (subtle, tight) */}
       <Circle cx={0} cy={0} r={R * 1.5}>
         <RadialGradient c={vec(0, 0)} r={R * 1.5} positions={[0.4, 1]} colors={[rgba(halo, 0.45), rgba(halo, 0)]} />
       </Circle>
-      {/* body — two-color diagonal gradient */}
+      {/* body — multi-color diagonal gradient sweep */}
       <Circle cx={0} cy={0} r={R}>
-        <LinearGradient start={vec(-R, -R)} end={vec(R, R)} colors={[c1, c2]} />
+        <LinearGradient start={vec(-R, -R)} end={vec(R, R)} colors={bodyColors} />
       </Circle>
       {/* glossy sheen */}
       <Circle cx={0} cy={0} r={R}>
         <RadialGradient
           c={vec(-R * 0.34, -R * 0.4)}
-          r={R * 1.25}
-          positions={[0, 0.55]}
-          colors={['rgba(255,255,255,0.8)', 'rgba(255,255,255,0)']}
+          r={R * 1.05}
+          positions={[0, 0.6]}
+          colors={['rgba(255,255,255,0.55)', 'rgba(255,255,255,0)']}
         />
       </Circle>
       {/* rim */}
@@ -816,16 +869,20 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 150,
     alignItems: 'center',
+    paddingHorizontal: 32,
     zIndex: 5,
   },
   readyTitle: {
     fontFamily: FONT.displaySemi,
     fontSize: 22,
     marginTop: 6,
+    textAlign: 'center',
   },
   readySub: {
     fontFamily: FONT.sans,
     fontSize: 13,
     marginTop: 4,
+    textAlign: 'center',
+    maxWidth: 320,
   },
 });
