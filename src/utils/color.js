@@ -33,6 +33,24 @@ export function mixHex(a, b, t) {
   );
 }
 
+// Relative luminance (0 = black, 1 = white) of a hex color — sRGB/WCAG.
+export function luminance(hex) {
+  const [r, g, b] = hexToRgb(hex);
+  const f = (c) => {
+    c /= 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+}
+
+// Pick dark vs light text for legibility over a set of background colors.
+// Bright (near-white) backgrounds → dark ink; otherwise → white.
+export function readableInk(colors, dark = '#0F1A2B', light = '#FFFFFF') {
+  const list = Array.isArray(colors) ? colors : [colors];
+  const avg = list.reduce((a, c) => a + luminance(c), 0) / list.length;
+  return avg > 0.7 ? dark : light;
+}
+
 // Build an rgba() string from a hex color and an alpha (0–1). Used for Skia,
 // which is happier with rgba() strings than 8-digit hex.
 export function rgba(hex, a) {

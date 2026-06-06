@@ -37,9 +37,10 @@ export default function SettingsScreen({ settings, onToggle, tweaks, setTweak, o
       <ScreenHead eyebrow="NO ACCOUNT · OFFLINE" title="Settings" />
 
       <Glass tone="hi" pad={0} radius={22} style={{ marginBottom: 16 }} innerStyle={{ padding: 0 }}>
-        <Row label="Sound" sub="Taps, chimes, ambience" value={settings.sound} onToggle={() => onToggle('sound')} />
+        <Row label="Music" sub="Ambient background loop" value={settings.music} onToggle={() => onToggle('music')} />
+        <Row label="Sound effects" sub="Orbit, slingshot, chimes" value={settings.sfx} onToggle={() => onToggle('sfx')} />
         <Row label="Reduced motion" sub="Calmer trails and shake" value={settings.reduceMotion} onToggle={() => onToggle('reduceMotion')} />
-        <Row label="Haptics" sub="Subtle taps on collision" value={settings.haptics} onToggle={() => onToggle('haptics')} />
+        <Row label="Haptics" sub="Subtle taps on key moments" value={settings.haptics} onToggle={() => onToggle('haptics')} />
         <Row label="Graphics quality" sub="Particles, stars and blur" value={settings.highQuality} onToggle={() => onToggle('highQuality')} last />
       </Glass>
 

@@ -11,6 +11,7 @@ import Float from '../components/Float';
 import { PrimaryButton } from '../components/Buttons';
 import { IconArrowUp, IconBest } from '../components/Icons';
 import { ASC, FONT } from '../theme';
+import { readableInk } from '../utils/color';
 import { fmtNum, fmtTime } from '../utils/format';
 
 function MiniStat({ label, value, accent }) {
@@ -40,6 +41,14 @@ export default function HomeScreen({
   topInset,
   bottomInset,
 }) {
+  // Play button picks up the equipped orb's gradient; text/icon flip dark on a
+  // near-white orb, white otherwise (so it's always legible).
+  const orbColors =
+    skin && skin.colors && skin.colors.length >= 2
+      ? skin.colors
+      : [skin?.c1 || '#FFFFFF', skin?.c2 || skin?.c1 || '#CFEFFF'];
+  const onOrb = readableInk(orbColors);
+
   return (
     <MenuScreen
       width={width}
@@ -80,8 +89,14 @@ export default function HomeScreen({
 
       <View style={{ flex: 1, minHeight: 30 }} />
 
-      {/* play */}
-      <PrimaryButton label="Play" icon={<IconArrowUp size={20} color="#08233C" />} onPress={onPlay} />
+      {/* play — tinted with the equipped orb's colors; text/icon contrast to it */}
+      <PrimaryButton
+        label="Play"
+        tint={orbColors}
+        textColor={onOrb}
+        icon={<IconArrowUp size={20} color={onOrb} />}
+        onPress={onPlay}
+      />
       <View style={styles.links}>
         {onHowTo && (
           <Pressable

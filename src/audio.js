@@ -1,8 +1,9 @@
 // ============ AUDIO ============
-// Sound effects + looping background music via expo-audio. Driven by the
-// "Sound" setting: initAudio() once, setSoundEnabled() on toggle, sfx() for
-// one-shots. All calls are guarded so a failure (e.g. asset/codec issue) never
-// crashes gameplay. Assets are generated originals (see scripts/gen-audio.js).
+// Sound effects + looping background music via expo-audio. Driven by two
+// independent settings: initAudio() once, then setMusicEnabled()/setSfxEnabled()
+// on toggle, and sfx() for one-shots. All calls are guarded so a failure (e.g.
+// asset/codec issue) never crashes gameplay. Assets are generated originals
+// (see scripts/gen-audio.js).
 
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 
@@ -17,15 +18,18 @@ const SFX_VOL = { tap: 0.5, grab: 0.6, launch: 0.72, well: 0.62, over: 0.7 };
 
 let players = null; // name → AudioPlayer (one-shots)
 let music = null; // looping background pad
-let enabled = false;
+let musicOn = false; // Music setting
+let sfxOn = false; // Sound effects setting
 let started = false;
 
-// Create the players once and start music if sound is on. Safe to call again;
-// later calls just sync the enabled state.
-export async function initAudio(soundOn) {
-  enabled = !!soundOn;
+// Create the players once, then honor the Music + Sound-effects settings. Safe
+// to call again; later calls just sync the toggle states.
+export async function initAudio(musicEnabled, sfxEnabled) {
+  musicOn = !!musicEnabled;
+  sfxOn = !!sfxEnabled;
   if (started) {
-    setSoundEnabled(enabled);
+    setMusicEnabled(musicOn);
+    setSfxEnabled(sfxOn);
     return;
   }
   started = true;
@@ -43,23 +47,28 @@ export async function initAudio(soundOn) {
     music = createAudioPlayer(require('../assets/audio/music.wav'));
     music.loop = true;
     music.volume = 0.85;
-    if (enabled) music.play();
+    if (musicOn) music.play();
   } catch (e) {}
 }
 
-// Toggle music with the Sound setting (sfx are gated by `enabled` too).
-export function setSoundEnabled(on) {
-  enabled = !!on;
+// Start/stop the looping background music (Music setting).
+export function setMusicEnabled(on) {
+  musicOn = !!on;
   if (!music) return;
   try {
-    if (enabled) music.play();
+    if (musicOn) music.play();
     else music.pause();
   } catch (e) {}
 }
 
-// Fire a one-shot effect by name (no-op when sound is off / not ready).
+// Enable/disable one-shot effects (Sound effects setting).
+export function setSfxEnabled(on) {
+  sfxOn = !!on;
+}
+
+// Fire a one-shot effect by name (no-op when sfx are off / not ready).
 export function sfx(name) {
-  if (!enabled || !players) return;
+  if (!sfxOn || !players) return;
   const p = players[name];
   if (!p) return;
   try {

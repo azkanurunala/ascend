@@ -2,7 +2,7 @@
 // State machine, persistence, navigation, revive system, fonts.
 // Ported from ascend-app.jsx and adapted to a real device (no iOS frame).
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, useWindowDimensions, Alert, LogBox } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,7 +29,7 @@ import {
 import { authenticateGameCenter, submitScore as submitLeaderboard } from './leaderboard';
 import { isValidGiftCode } from './giftcodes';
 import { AUTO_DEMO, DEMO_SCORE, DEMO_SCREEN } from './debug';
-import { initAudio, setSoundEnabled } from './audio';
+import { initAudio, setMusicEnabled, setSfxEnabled } from './audio';
 import GameStage from './game/GameStage';
 import HomeScreen from './screens/HomeScreen';
 import LeaderboardScreen from './screens/LeaderboardScreen';
@@ -49,7 +49,7 @@ LogBox.ignoreLogs([/\[RevenueCat\]/, /problem with the App Store/, /offerings/i]
 
 const DEFAULT_OWNED = ['drift']; // free skin; the rest unlock with Ascend Pro
 const ALL_SKIN_IDS = ASC_SKINS.map((s) => s.id);
-const DEFAULT_SETTINGS = { sound: true, reduceMotion: false, haptics: true, highQuality: true };
+const DEFAULT_SETTINGS = { music: false, sfx: true, reduceMotion: false, haptics: true, highQuality: true };
 const DEFAULT_TWEAKS = { difficulty: 'normal', menuMotion: true };
 const FREE_REVIVES_PER_DAY = 3; // 3 free revives/day; beyond that, Ascend Pro (Pro = unlimited)
 
@@ -110,7 +110,16 @@ function Game() {
       setEquipped(s.skin);
       setGiftPro(!!s.giftPro);
       setRevive(s.revive);
-      setSettings({ ...DEFAULT_SETTINGS, ...s.settings });
+      // migrate the old single "sound" setting → separate music + sfx
+      {
+        const merged = { ...DEFAULT_SETTINGS, ...s.settings };
+        if (s.settings && s.settings.sound !== undefined) {
+          if (s.settings.music === undefined) merged.music = s.settings.sound;
+          if (s.settings.sfx === undefined) merged.sfx = s.settings.sound;
+          delete merged.sound;
+        }
+        setSettings(merged);
+      }
       setTweaks({ ...DEFAULT_TWEAKS, ...s.tweaks });
       setOnboarded(!!s.onboarded);
       setIntroSeen(!!s.introSeen);
@@ -132,9 +141,10 @@ function Game() {
   useEffect(() => { if (loaded) LS.set('onboarded', onboarded); }, [onboarded, loaded]);
   useEffect(() => { if (loaded) LS.set('introSeen', introSeen); }, [introSeen, loaded]);
 
-  // ---- audio: start once, then follow the Sound setting ----
-  useEffect(() => { if (loaded) initAudio(settings.sound); }, [loaded]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (loaded) setSoundEnabled(settings.sound); }, [settings.sound, loaded]);
+  // ---- audio: start once, then follow the Music + Sound-effects settings ----
+  useEffect(() => { if (loaded) initAudio(settings.music, settings.sfx); }, [loaded]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (loaded) setMusicEnabled(settings.music); }, [settings.music, loaded]);
+  useEffect(() => { if (loaded) setSfxEnabled(settings.sfx); }, [settings.sfx, loaded]);
 
   // ---- monetization init (once) ----
   // Start Game Center, configure RevenueCat with a customer-info listener (the
@@ -196,16 +206,28 @@ function Game() {
   }, [tutorial, beginRun]);
 
   const openTutorial = useCallback(() => setTutorial('manual'), []);
-  const playIntro = useCallback(() => setShowIntro(true), []);
+  // chainAfterIntro: true only for the first-launch intro, so the cinematic
+  // (Story) flows straight into the how-to-play tutorial. Manual replays don't.
+  const chainAfterIntro = useRef(false);
+  const playIntro = useCallback(() => {
+    chainAfterIntro.current = false;
+    setShowIntro(true);
+  }, []);
   const onIntroDone = useCallback(() => {
     setShowIntro(false);
     setIntroSeen(true);
+    if (chainAfterIntro.current) {
+      chainAfterIntro.current = false;
+      setTutorial('manual'); // first run: Story → How to play, then Home
+    }
   }, []);
 
-  // Play the cinematic once on first launch (not during debug captures).
+  // First launch: play the cinematic (then chain into the tutorial). Skipped
+  // during debug captures.
   useEffect(() => {
     if (!loaded || introSeen) return;
     if (__DEV__ && (AUTO_DEMO || DEMO_SCREEN)) return;
+    chainAfterIntro.current = true;
     setShowIntro(true);
   }, [loaded, introSeen]);
 

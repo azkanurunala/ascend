@@ -7,24 +7,26 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { ASC, FONT } from '../theme';
 import { sfx } from '../audio';
 
-export function PrimaryButton({ label, icon, onPress, disabled, style, size = 'lg' }) {
+export function PrimaryButton({ label, icon, onPress, disabled, style, size = 'lg', tint, textColor }) {
   const press = () => {
     sfx('tap');
     onPress && onPress();
   };
+  // optional tint: color the button with the orb's gradient (Home Play button)
+  const colors = tint && tint.length >= 2 ? tint : ['#FFFFFF', '#CFEFFF'];
   return (
     <Pressable
       onPress={disabled ? undefined : press}
       style={({ pressed }) => [styles.primaryWrap, style, disabled && { opacity: 0.55 }, pressed && !disabled && styles.pressed]}
     >
       <LinearGradient
-        colors={['#FFFFFF', '#CFEFFF']}
+        colors={colors}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={[styles.primary, size === 'sm' && styles.primarySm]}
       >
         {icon}
-        <Text style={[styles.primaryText, size === 'sm' && styles.primaryTextSm]}>{label}</Text>
+        <Text style={[styles.primaryText, size === 'sm' && styles.primaryTextSm, textColor && { color: textColor }]}>{label}</Text>
       </LinearGradient>
     </Pressable>
   );
