@@ -10,7 +10,7 @@
 // ⚠️  BOTH MUST BE RESET BEFORE SHIPPING — AUTO_DEMO=false, DEMO_SCORE=0.
 //     App.js also gates AUTO_DEMO behind __DEV__ so it can never reach the
 //     App Store even if left on by accident.
-export const AUTO_DEMO = true;
+export const AUTO_DEMO = false;
 export const DEMO_SCORE = 0;
 
 // Force the initial screen on launch so each can be screenshotted without
