@@ -743,7 +743,7 @@ export default function GameStage({
           ))}
 
           {/* orb */}
-          <Ball x={w.orbScreen.x} y={w.orbScreen.y} rot={w.rot || 0} skin={sk} />
+          <Ball x={w.orbScreen.x} y={w.orbScreen.y} rot={w.rot || 0} skin={sk} r={BALL_R} />
 
           {/* revive flash */}
           {w.flashRevive > 0 && (
@@ -834,8 +834,10 @@ function Well({ wl, sx, sy, dark, hq }) {
 }
 
 // ---- ball ------------------------------------------------------------------
-function Ball({ x, y, rot, skin }) {
-  const R = BALL_R;
+function Ball({ x, y, rot, skin, r }) {
+  // R comes in as a prop: BALL_R is scaled per-device inside GameStage, and this
+  // component is top-level so it can't close over that scoped value.
+  const R = r;
   const c1 = skin.c1 || skin.core || '#FFFFFF';
   const c2 = skin.c2 || skin.glow || c1;
   const halo = skin.glow || c2;
