@@ -31,6 +31,7 @@ import { sfx } from '../audio';
 // and speeds all scale together, keeping every well reachable. (Without this,
 // iPad spread wells far apart while reach stayed fixed → unreachable gaps.)
 const BASE_W = 393; // iPhone logical width the physics were tuned at
+const BASE_H = 852; // …and its logical height — together they fix the play aspect
 const BASE_BALL_R = 14;
 const BASE_ORB_GRAV = 480; // downward world pull (px/s²) — what you slingshot against
 const BASE_CAPTURE_R = 142; // how close to a well's center a grab will latch
@@ -84,15 +85,17 @@ export default function GameStage({
   const W = width;
   const H = height;
 
-  // Screen scale vs the iPhone baseline. Shadows the BASE_* constants with
-  // scaled values so every physics/geometry calc below stays proportional on
-  // larger canvases (iPad): reach, capture range, launch power AND well spacing
-  // all grow by the same S, so a bigger canvas is a cleanly zoomed iPhone and
-  // every well stays as reachable as it is on phone. Orientation is locked to
-  // portrait, so S tops out ~2.6 on a 12.9" iPad. Only a lower floor is clamped
-  // (tiny split-view widths) — NEVER cap the top: an upper clamp freezes reach
-  // while raw-W placement keeps spreading wells, recreating the iPad gap bug.
-  const S = Math.max(0.9, W / BASE_W);
+  // LETTERBOX the play field to the iPhone aspect ratio, then scale by ONE
+  // factor. iPad is far wider than an iPhone for its height; scaling by raw width
+  // made the orb/wells huge, and scaling by height alone spread wells past reach.
+  // Instead we cap the playable column to BASE_W/BASE_H of the height (PW) and
+  // centre it (OX) — the sky fills the side margins. Inside PW everything is an
+  // exactly-zoomed iPhone: visuals stay proportional AND every well is reachable.
+  // On modern iPhones PW === W (they already sit at this aspect) so phones are
+  // untouched; on iPad PW shrinks and S lands ~1.4 instead of ~2.1.
+  const PW = Math.min(W, (H * BASE_W) / BASE_H);
+  const OX = (W - PW) / 2;
+  const S = Math.max(0.9, PW / BASE_W);
   const BALL_R = BASE_BALL_R * S;
   const ORB_GRAV = BASE_ORB_GRAV * S;
   const CAPTURE_R = BASE_CAPTURE_R * S;
@@ -167,9 +170,11 @@ export default function GameStage({
     const w = {
       W,
       H,
+      PW, // playable column width (letterboxed to iPhone aspect)
+      OX, // left offset that centres that column in the full canvas
       // orb lives in world space; +y is UP (it climbs as y grows)
-      orb: { x: W * 0.5, y: baseY, vx: 0, vy: 0 },
-      orbScreen: { x: W * 0.5, y: H * ANCHOR },
+      orb: { x: OX + PW * 0.5, y: baseY, vx: 0, vy: 0 },
+      orbScreen: { x: OX + PW * 0.5, y: H * ANCHOR },
       wells: [],
       wellCount: 0,
       holding: false, // finger currently down → orbiting
@@ -202,7 +207,7 @@ export default function GameStage({
       flashRevive: 0,
     };
     // seed the first well right under the orb so the ready-screen demo orbits it
-    w.wells.push(makeWell(w, W * 0.5, baseY));
+    w.wells.push(makeWell(w, OX + PW * 0.5, baseY));
     // pre-spawn a ladder of wells above so the climb is visible from frame one
     while (w.wells[w.wells.length - 1].y < baseY + H * 1.4) spawnWell(w);
     return w;
@@ -235,15 +240,15 @@ export default function GameStage({
     const dy = Math.min((148 + Math.random() * 78) * S * D.spacing, H * 0.34);
     const ny = (last ? last.y : 0) + dy;
     const margin = 68 * S;
-    let nx = W * 0.5;
+    let nx = OX + PW * 0.5;
     if (last) {
-      // zig-zag, but keep the horizontal gap within slingshot reach. maxDX is
-      // tied to S (not raw width) so a wide canvas can't place wells unreachably
-      // far apart (the iPad bug). minGap keeps consecutive wells distinct.
-      const minGap = Math.min(W * 0.26, 120 * S);
+      // zig-zag inside the letterboxed column [OX, OX+PW] — bounds and maxDX both
+      // ride PW/S, never the raw canvas width, so wells can't spread past reach
+      // (the iPad bug). minGap keeps consecutive wells distinct.
+      const minGap = Math.min(PW * 0.26, 120 * S);
       const maxDX = 300 * S;
-      const lo = Math.max(margin, last.baseX - maxDX);
-      const hi = Math.min(W - margin, last.baseX + maxDX);
+      const lo = Math.max(OX + margin, last.baseX - maxDX);
+      const hi = Math.min(OX + PW - margin, last.baseX + maxDX);
       for (let i = 0; i < 10; i++) {
         nx = lo + Math.random() * (hi - lo);
         if (Math.abs(nx - last.baseX) >= minGap) break;
@@ -382,8 +387,8 @@ export default function GameStage({
       vy -= g * dt;
       x += vx * dt;
       y += vy * dt;
-      if (x < BALL_R) { x = BALL_R; vx = Math.abs(vx) * 0.92; }
-      else if (x > w.W - BALL_R) { x = w.W - BALL_R; vx = -Math.abs(vx) * 0.92; }
+      if (x < w.OX + BALL_R) { x = w.OX + BALL_R; vx = Math.abs(vx) * 0.92; }
+      else if (x > w.OX + w.PW - BALL_R) { x = w.OX + w.PW - BALL_R; vx = -Math.abs(vx) * 0.92; }
       if (Math.hypot(x - t.x, y - t.y) < CAPTURE_R * 0.85) return true;
       if (vy < 0 && y < t.y - CAPTURE_R) return false; // falling below the target — missed
     }
@@ -485,11 +490,11 @@ export default function GameStage({
       }
       w.orb.x += w.orb.vx * dt;
       w.orb.y += w.orb.vy * dt;
-      if (w.orb.x < BALL_R) {
-        w.orb.x = BALL_R;
+      if (w.orb.x < w.OX + BALL_R) {
+        w.orb.x = w.OX + BALL_R;
         w.orb.vx = Math.abs(w.orb.vx) * 0.92;
-      } else if (w.orb.x > w.W - BALL_R) {
-        w.orb.x = w.W - BALL_R;
+      } else if (w.orb.x > w.OX + w.PW - BALL_R) {
+        w.orb.x = w.OX + w.PW - BALL_R;
         w.orb.vx = -Math.abs(w.orb.vx) * 0.92;
       }
     }
@@ -513,8 +518,10 @@ export default function GameStage({
     const cullY = w.camY - w.H * 1.2;
     w.wells = w.wells.filter((wl) => wl.y > cullY || wl === w.orbitWell);
 
-    // death: orb fell off the bottom of the screen
-    if (w.orbScreen.y > w.H + 46) die(w);
+    // death: orb FELL off the bottom — only while in free flight. While latched
+    // and orbiting, the orb's arc can swing below the screen edge even though
+    // you're safely attached to a well; that must not count as a fall.
+    if (!w.holding && w.orbScreen.y > w.H + 46) die(w);
 
     // rotation for the orb sprite — face its travel direction
     w.rot = clamp(Math.atan2(w.orb.vy, Math.abs(w.orb.vx) + 1) * -0.4, -0.6, 0.6);
