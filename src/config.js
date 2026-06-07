@@ -28,7 +28,7 @@ export const PRO_PRODUCT_ID = 'lifetime';
 // Display-only fallback price for the paywall when the store can't return a
 // live price (e.g. Simulator without a StoreKit config). The real localized
 // price from the store always takes precedence when available.
-export const PRO_FALLBACK_PRICE = '$3.99';
+export const PRO_FALLBACK_PRICE = '$2.99';
 
 // No ads. Reviving beyond the free daily one requires the Ascend Pro purchase.
 

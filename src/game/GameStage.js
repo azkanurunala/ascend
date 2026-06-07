@@ -25,17 +25,22 @@ import { ASC, FONT, skyAt } from '../theme';
 import { rgba } from '../utils/color';
 import { sfx } from '../audio';
 
-const BALL_R = 14;
-const ORB_GRAV = 480; // downward world pull (px/s²) — what you slingshot against
-const CAPTURE_R = 142; // how close to a well's center a grab will latch
-const ORBIT_MIN = 44; // clamp the orbit radius so latches feel consistent
-const ORBIT_MAX = 116;
-const SPEED_MIN = 300; // orbital/flight speed floor so the orb never crawls
-const SPEED_MAX = 820; // …and ceiling so a charged fling can't go ballistic
-const SPIN_ACCEL = 600; // holding spins the orbit up (px/s² of tangential speed) — this IS your launch power
+// BASE_* values are tuned for the iPhone width below. At runtime everything is
+// multiplied by a screen scale S = width / BASE_W, so a bigger canvas (iPad)
+// plays as a proportionally zoomed iPhone — well spacing, reach, capture range
+// and speeds all scale together, keeping every well reachable. (Without this,
+// iPad spread wells far apart while reach stayed fixed → unreachable gaps.)
+const BASE_W = 393; // iPhone logical width the physics were tuned at
+const BASE_BALL_R = 14;
+const BASE_ORB_GRAV = 480; // downward world pull (px/s²) — what you slingshot against
+const BASE_CAPTURE_R = 142; // how close to a well's center a grab will latch
+const BASE_ORBIT_MIN = 44; // clamp the orbit radius so latches feel consistent
+const BASE_SPEED_MIN = 300; // orbital/flight speed floor so the orb never crawls
+const BASE_SPEED_MAX = 820; // …and ceiling so a charged fling can't go ballistic
+const BASE_SPIN_ACCEL = 600; // holding spins the orbit up — this IS your launch power
+const BASE_ALT_SCALE = 5; // world-px of climb per score point (scaled so score is device-independent)
 const RELEASE_BOOST = 1.04; // small extra slingshot kick on release
 const ANCHOR = 0.6; // the orb rides ~60% down the screen; upcoming wells sit above
-const ALT_SCALE = 5; // world-px of climb per score point
 const WELL_BONUS = 20; // score for each fresh well grabbed (combo)
 
 // difficulty knobs: stronger pull, wider spacing and more well drift = harder
@@ -78,6 +83,24 @@ export default function GameStage({
 }) {
   const W = width;
   const H = height;
+
+  // Screen scale vs the iPhone baseline. Shadows the BASE_* constants with
+  // scaled values so every physics/geometry calc below stays proportional on
+  // larger canvases (iPad): reach, capture range, launch power AND well spacing
+  // all grow by the same S, so a bigger canvas is a cleanly zoomed iPhone and
+  // every well stays as reachable as it is on phone. Orientation is locked to
+  // portrait, so S tops out ~2.6 on a 12.9" iPad. Only a lower floor is clamped
+  // (tiny split-view widths) — NEVER cap the top: an upper clamp freezes reach
+  // while raw-W placement keeps spreading wells, recreating the iPad gap bug.
+  const S = Math.max(0.9, W / BASE_W);
+  const BALL_R = BASE_BALL_R * S;
+  const ORB_GRAV = BASE_ORB_GRAV * S;
+  const CAPTURE_R = BASE_CAPTURE_R * S;
+  const ORBIT_MIN = BASE_ORBIT_MIN * S;
+  const SPEED_MIN = BASE_SPEED_MIN * S;
+  const SPEED_MAX = BASE_SPEED_MAX * S;
+  const SPIN_ACCEL = BASE_SPIN_ACCEL * S;
+  const ALT_SCALE = BASE_ALT_SCALE * S;
 
   const g = useRef(null);
   const [phase, setPhase] = useState('ready'); // ready | run | dead
@@ -187,12 +210,12 @@ export default function GameStage({
 
   function makeWell(w, x, y) {
     const D = DIFF[difRef.current] || DIFF.normal;
-    const driftAmp = w.score > 1400 ? (18 + Math.random() * 42) * D.drift : 0;
+    const driftAmp = w.score > 1400 ? (18 + Math.random() * 42) * S * D.drift : 0;
     const well = {
       baseX: x,
       x,
       y,
-      r: 30 + Math.random() * 8,
+      r: (30 + Math.random() * 8) * S,
       tint: WELL_TINTS[w.wellCount % WELL_TINTS.length],
       driftAmp,
       driftSp: 0.5 + Math.random() * 0.7,
@@ -205,14 +228,20 @@ export default function GameStage({
   function spawnWell(w) {
     const D = DIFF[difRef.current] || DIFF.normal;
     const last = w.wells[w.wells.length - 1];
-    const dy = (148 + Math.random() * 78) * D.spacing;
+    const dy = (148 + Math.random() * 78) * S * D.spacing;
     const ny = (last ? last.y : 0) + dy;
-    const margin = 68;
+    const margin = 68 * S;
     let nx = W * 0.5;
     if (last) {
-      const minGap = W * 0.26;
-      for (let i = 0; i < 8; i++) {
-        nx = margin + Math.random() * (W - 2 * margin);
+      // zig-zag, but keep the horizontal gap within slingshot reach. maxDX is
+      // tied to S (not raw width) so a wide canvas can't place wells unreachably
+      // far apart (the iPad bug). minGap keeps consecutive wells distinct.
+      const minGap = Math.min(W * 0.26, 120 * S);
+      const maxDX = 300 * S;
+      const lo = Math.max(margin, last.baseX - maxDX);
+      const hi = Math.min(W - margin, last.baseX + maxDX);
+      for (let i = 0; i < 10; i++) {
+        nx = lo + Math.random() * (hi - lo);
         if (Math.abs(nx - last.baseX) >= minGap) break;
       }
     }
