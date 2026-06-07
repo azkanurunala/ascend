@@ -233,10 +233,10 @@ export default function GameStage({
   function spawnWell(w) {
     const D = DIFF[difRef.current] || DIFF.normal;
     const last = w.wells[w.wells.length - 1];
-    // Vertical gap scales with S (width), but the orb dies at H+46 below a 0.6·H
-    // anchor, so fall-recovery room is height-based. iPad's shorter aspect ratio
-    // shrinks that room while S grows the gap — cap dy to 0.34·H so the next well
-    // always stays within reach of a fall. No-op on tall phones (cap > max gap).
+    // Vertical gap scales with S; cap it to 0.34·H as a hard safety so the next
+    // well can never sit past the fall-recovery window (death is at H+46 below a
+    // 0.6·H anchor). With the letterboxed S this is normally a no-op — it only
+    // bites on an unusually short/wide canvas.
     const dy = Math.min((148 + Math.random() * 78) * S * D.spacing, H * 0.34);
     const ny = (last ? last.y : 0) + dy;
     const margin = 68 * S;
